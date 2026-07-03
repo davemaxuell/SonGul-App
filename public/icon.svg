@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#F5F1E6"/>
+  <rect x="88" y="88" width="336" height="336" fill="none" stroke="#3F7261" stroke-width="18"/>
+  <line x1="256" y1="88" x2="256" y2="424" stroke="#3F7261" stroke-width="7" stroke-dasharray="14 14"/>
+  <line x1="88" y1="256" x2="424" y2="256" stroke="#3F7261" stroke-width="7" stroke-dasharray="14 14"/>
+  <text x="256" y="318" font-family="'Apple SD Gothic Neo','Malgun Gothic',sans-serif" font-size="180" font-weight="700" fill="#262119" text-anchor="middle">손</text>
+</svg>

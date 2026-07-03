@@ -1,0 +1,13 @@
+{
+  "name": "SonGul Note",
+  "short_name": "SonGul",
+  "description": "Handwriting notebook for Korean learners",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F0EBDF",
+  "theme_color": "#F0EBDF",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
