@@ -7,6 +7,7 @@ import type {
   FeedbackResult,
   Notebook,
   Page,
+  RecognitionRecord,
   Stroke,
   TemplateId,
 } from './types';
@@ -21,24 +22,35 @@ interface SongulDB extends DBSchema {
   pageImages: { key: string; value: { pageId: string; blob: Blob } };
   feedback: { key: string; value: FeedbackResult; indexes: { 'by-notebook': string } };
   settings: { key: string; value: { key: string; value: unknown } };
+  recognition_results: {
+    key: string;
+    value: RecognitionRecord;
+    indexes: { 'by-page': string };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<SongulDB>> | null = null;
 
 function db(): Promise<IDBPDatabase<SongulDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<SongulDB>('songul-note', 1, {
-      upgrade(d) {
-        d.createObjectStore('notebooks', { keyPath: 'id' });
-        const pages = d.createObjectStore('pages', { keyPath: 'id' });
-        pages.createIndex('by-notebook', 'notebookId');
-        const strokes = d.createObjectStore('strokes', { keyPath: 'id' });
-        strokes.createIndex('by-page', 'pageId');
-        d.createObjectStore('attachments', { keyPath: 'id' });
-        d.createObjectStore('pageImages', { keyPath: 'pageId' });
-        const fb = d.createObjectStore('feedback', { keyPath: 'id' });
-        fb.createIndex('by-notebook', 'notebookId');
-        d.createObjectStore('settings', { keyPath: 'key' });
+    dbPromise = openDB<SongulDB>('songul-note', 2, {
+      upgrade(d, oldVersion) {
+        if (oldVersion < 1) {
+          d.createObjectStore('notebooks', { keyPath: 'id' });
+          const pages = d.createObjectStore('pages', { keyPath: 'id' });
+          pages.createIndex('by-notebook', 'notebookId');
+          const strokes = d.createObjectStore('strokes', { keyPath: 'id' });
+          strokes.createIndex('by-page', 'pageId');
+          d.createObjectStore('attachments', { keyPath: 'id' });
+          d.createObjectStore('pageImages', { keyPath: 'pageId' });
+          const fb = d.createObjectStore('feedback', { keyPath: 'id' });
+          fb.createIndex('by-notebook', 'notebookId');
+          d.createObjectStore('settings', { keyPath: 'key' });
+        }
+        if (oldVersion < 2) {
+          const rec = d.createObjectStore('recognition_results', { keyPath: 'key' });
+          rec.createIndex('by-page', 'pageId');
+        }
       },
     });
   }
@@ -79,6 +91,7 @@ export async function deleteNotebookCascade(id: string): Promise<void> {
   for (const p of pages) {
     const strokes = await d.getAllFromIndex('strokes', 'by-page', p.id);
     for (const s of strokes) await d.delete('strokes', s.id);
+    await deleteRecognitionForPage(p.id);
     await d.delete('pageImages', p.id);
     await d.delete('pages', p.id);
   }
@@ -128,6 +141,7 @@ export async function deletePageCascade(pageId: string): Promise<void> {
   const d = await db();
   const strokes = await d.getAllFromIndex('strokes', 'by-page', pageId);
   for (const s of strokes) await d.delete('strokes', s.id);
+  await deleteRecognitionForPage(pageId);
   await d.delete('pageImages', pageId);
   await d.delete('pages', pageId);
 }
@@ -187,6 +201,32 @@ export async function addFeedback(fb: FeedbackResult): Promise<void> {
 export async function listFeedback(notebookId: string): Promise<FeedbackResult[]> {
   const all = await (await db()).getAllFromIndex('feedback', 'by-notebook', notebookId);
   return all.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+// ---- recognition ----
+
+export async function putRecognition(rec: RecognitionRecord): Promise<void> {
+  await (await db()).put('recognition_results', rec);
+}
+
+export async function listRecognitionByPage(pageId: string): Promise<RecognitionRecord[]> {
+  return (await db()).getAllFromIndex('recognition_results', 'by-page', pageId);
+}
+
+export async function listAllRecognition(): Promise<RecognitionRecord[]> {
+  return (await db()).getAll('recognition_results');
+}
+
+export async function deleteRecognition(key: string): Promise<void> {
+  await (await db()).delete('recognition_results', key);
+}
+
+export async function deleteRecognitionForPage(pageId: string): Promise<void> {
+  const d = await db();
+  const rows = await d.getAllFromIndex('recognition_results', 'by-page', pageId);
+  const tx = d.transaction('recognition_results', 'readwrite');
+  for (const r of rows) tx.store.delete(r.key);
+  await tx.done;
 }
 
 // ---- settings ----

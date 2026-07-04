@@ -104,6 +104,21 @@ export interface FeedbackResult {
   bbox?: BBox | null;
 }
 
+export interface RecognitionRecord {
+  /** `${pageId}:${clusterId}` */
+  key: string;
+  notebookId: string;
+  pageId: string;
+  clusterId: string;
+  text: string;
+  confidence: number;
+  strokeIds: string[];
+  bbox: BBox;
+  provider: string;
+  timestamp: number;
+  status: 'ok' | 'failed';
+}
+
 export type AiMode = 'auto' | 'local' | 'remote';
 
 export interface Settings {
