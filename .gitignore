@@ -6,5 +6,6 @@ dist/
 .playwright-mcp/
 server/data/
 server/.env
+.env
 
 *.apk
