@@ -11,6 +11,7 @@ import { bboxOfStrokes } from '../ink/geometry';
 import { importPdfIntoNotebook } from '../pdf/importPdf';
 import { exportNotebookPdf, exportPagePng, downloadBlob } from '../pdf/exportPdf';
 import { exportBundle } from '../bundle';
+import { autoBackupOnClose } from '../cloud/backup';
 import { RecognitionScheduler } from '../recognition/scheduler';
 import { mlkitProvider } from '../feedback/recognition';
 import { inkRecognitionAvailable } from '../recognition/songulInk';
@@ -468,7 +469,14 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
       {exportOpen && <div className="menu-backdrop" onClick={() => setExportOpen(false)} />}
       <header className="editor-topbar">
         <div className="topbar-left">
-          <button className="icon-btn back-btn" onClick={onBack} aria-label="Back to library">
+          <button
+            className="icon-btn back-btn"
+            onClick={() => {
+              void autoBackupOnClose(notebook, settings.autoBackup);
+              onBack();
+            }}
+            aria-label="Back to library"
+          >
             ←
           </button>
           <h1 className="notebook-title">{notebook.title}</h1>
