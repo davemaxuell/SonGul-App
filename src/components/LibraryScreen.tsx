@@ -11,7 +11,7 @@ import { downloadBlob } from '../pdf/exportPdf';
 import Modal from './Modal';
 import TemplatePicker from './TemplatePicker';
 
-const COVERS = ['cover-celadon', 'cover-ink', 'cover-vermilion', 'cover-ochre'];
+const COVERS = ['cover-pen', 'cover-navy', 'cover-warm', 'cover-green'];
 
 function coverClass(id: string): string {
   let h = 0;
@@ -119,10 +119,11 @@ export default function LibraryScreen({ settings, onOpen, onOpenSettings }: Prop
       {menuFor && <div className="menu-backdrop" onClick={() => setMenuFor(null)} />}
       <header className="library-header">
         <div className="wordmark">
-          <span className="wordmark-box">손</span>
+          <img className="brand-logo" src="/assets/SonGul-LOGO.png" alt="SonGul" />
+          <span className="wordmark-rule" aria-hidden="true" />
           <span className="wordmark-text">
-            SonGul Note
-            <small>손글 — a handwriting notebook for Korean learners</small>
+            <strong>Note</strong>
+            <small>손으로 배우는 한국어</small>
           </span>
         </div>
         <div className="library-actions">
@@ -161,16 +162,15 @@ export default function LibraryScreen({ settings, onOpen, onOpenSettings }: Prop
 
       {notebooks.length === 0 ? (
         <div className="library-empty">
-          <div className="empty-square">
-            <span>손</span>
-          </div>
+          <img className="empty-mascot" src="/assets/mascot-tutor.png" alt="" aria-hidden="true" />
           <h2>Start your first notebook</h2>
+          <span className="hand-note">한국어로 자유롭게 써보세요!</span>
           <p>
-            Write Korean by hand, annotate worksheets, and get feedback on spacing and grammar —
-            all offline.
+            Write Korean by hand, annotate worksheets, and get instant feedback on spacing and
+            grammar — all offline.
           </p>
           <button className="btn btn-primary" onClick={() => setNewOpen(true)}>
-            + New notebook
+            ✎ + New notebook
           </button>
         </div>
       ) : (

@@ -1,37 +1,33 @@
 // The SonGul feedback panel — the "teacher's red pen" layer.
 // Pipeline: lasso selection → (pluggable) recognition → editable text →
-// Korean checkers → findings with explanations → history → practice pages.
+// feedback engine (on-device rules today, SonGul AI gateway when configured)
+// → findings with explanations → history → practice pages.
 import { useEffect, useMemo, useState } from 'react';
-import type { BBox, Finding, Notebook, Page, FeedbackResult } from '../types';
+import type { BBox, Finding, Notebook, Page, FeedbackResult, Settings, Stroke } from '../types';
 import * as db from '../db';
 import { uid } from '../ids';
-import { checkKorean, FINDING_LABELS } from '../feedback/korean';
+import { applyFindings, FINDING_LABELS } from '../feedback/korean';
+import { analyzeSmart, type EngineResult } from '../feedback/client';
 import { getProvider, providers } from '../feedback/recognition';
 
 export interface AnalysisRequest {
   imageUrl: string | null;
   bbox: BBox | null;
   strokeCount: number;
+  /** the lassoed vector ink — sent to the gateway so a future AI can judge
+      handwriting shape, not just text */
+  strokes?: Stroke[];
 }
 
 interface Props {
   notebook: Notebook;
   page: Page;
+  settings: Settings;
   request: AnalysisRequest | null;
   onHighlight: (b: BBox[]) => void;
   onCreatePractice: (sentences: string[]) => void;
   onJumpTo: (pageId: string, bbox: BBox | null) => void;
   onClose: () => void;
-}
-
-/** apply findings to text to produce the corrected sentence */
-function applyFindings(text: string, findings: Finding[]): string {
-  let out = text;
-  const spans = findings.filter((f) => f.end > f.start).sort((a, b) => b.start - a.start);
-  for (const f of spans) {
-    out = out.slice(0, f.start) + f.suggestion + out.slice(f.end);
-  }
-  return out;
 }
 
 function severityClass(s: Finding['severity']): string {
@@ -43,6 +39,8 @@ export default function FeedbackPanel(p: Props) {
   const [providerId, setProviderId] = useState('mock');
   const [text, setText] = useState('');
   const [findings, setFindings] = useState<Finding[] | null>(null);
+  const [engineMeta, setEngineMeta] = useState<EngineResult | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const [history, setHistory] = useState<FeedbackResult[]>([]);
   const [recognizing, setRecognizing] = useState(false);
 
@@ -72,21 +70,31 @@ export default function FeedbackPanel(p: Props) {
 
   async function analyze() {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    const result = checkKorean(trimmed);
-    setFindings(result);
-    const record: FeedbackResult = {
-      id: uid(),
-      notebookId: p.notebook.id,
-      pageId: p.page.id,
-      createdAt: Date.now(),
-      sourceText: trimmed,
-      findings: result,
-      bbox: p.request?.bbox ?? null,
-    };
-    await db.addFeedback(record);
-    await refreshHistory();
-    if (p.request?.bbox) p.onHighlight([p.request.bbox]);
+    if (!trimmed || analyzing) return;
+    setAnalyzing(true);
+    try {
+      const engineResult = await analyzeSmart(p.settings, {
+        text: trimmed,
+        strokes: p.request?.strokes,
+        imageDataUrl: p.request?.imageUrl,
+      });
+      setFindings(engineResult.findings);
+      setEngineMeta(engineResult);
+      const record: FeedbackResult = {
+        id: uid(),
+        notebookId: p.notebook.id,
+        pageId: p.page.id,
+        createdAt: Date.now(),
+        sourceText: trimmed,
+        findings: engineResult.findings,
+        bbox: p.request?.bbox ?? null,
+      };
+      await db.addFeedback(record);
+      await refreshHistory();
+      if (p.request?.bbox) p.onHighlight([p.request.bbox]);
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   const corrected = useMemo(
@@ -199,9 +207,30 @@ export default function FeedbackPanel(p: Props) {
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
-          <button className="btn btn-primary fb-analyze" disabled={!text.trim()} onClick={() => void analyze()}>
-            Analyze · 분석
+          <button
+            className="btn btn-primary fb-analyze"
+            disabled={!text.trim() || analyzing}
+            onClick={() => void analyze()}
+          >
+            {analyzing ? '분석 중…' : '내 글씨 확인 · Check my writing'}
           </button>
+
+          {engineMeta && findings && (
+            <div className="fb-meta">
+              <span className={'fb-badge' + (engineMeta.engine === 'local' ? ' offline' : '')}>
+                {engineMeta.engine === 'local' ? '📱 on-device' : '☁ ' + engineMeta.provider}
+                {' · '}
+                {engineMeta.latencyMs}ms
+                {engineMeta.cached ? ' · cached' : ''}
+              </span>
+            </div>
+          )}
+          {engineMeta?.fallbackReason && (
+            <p className="fb-fallback-note">
+              서버에 연결하지 못해 기기 내 검사기로 확인했어요. (server unreachable — checked
+              on-device instead: {engineMeta.fallbackReason})
+            </p>
+          )}
 
           {findings && findings.length === 0 && (
             <div className="fb-clean">잘 썼어요! No issues found by the v0 checkers.</div>

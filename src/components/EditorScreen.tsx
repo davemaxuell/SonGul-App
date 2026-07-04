@@ -266,6 +266,7 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
           imageUrl: canvas.toDataURL('image/png'),
           bbox,
           strokeCount: strokes.length,
+          strokes,
         });
         setPanelOpen(true);
       }
@@ -543,6 +544,7 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
           <FeedbackPanel
             notebook={notebook}
             page={currentPage}
+            settings={settings}
             request={analysisRequest}
             onHighlight={setHighlights}
             onCreatePractice={(sentences) => void createPracticePage(sentences)}

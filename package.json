@@ -1,13 +1,14 @@
 {
   "name": "songul-note",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "SonGul Note - tablet-first handwriting notebook for Korean learners",
+  "description": "SonGul - learn Korean by hand: handwriting notebook with instant feedback",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "node server/index.ts"
   },
   "dependencies": {
     "idb": "^8.0.0",

@@ -1,4 +1,6 @@
-import type { Settings } from '../types';
+import { useState } from 'react';
+import type { AiMode, Settings } from '../types';
+import { checkGateway } from '../feedback/client';
 import Modal from './Modal';
 import TemplatePicker from './TemplatePicker';
 
@@ -8,7 +10,33 @@ interface Props {
   onClose: () => void;
 }
 
+const AI_MODES: { id: AiMode; label: string; hint: string }[] = [
+  { id: 'auto', label: 'Auto', hint: 'server when configured, on-device otherwise' },
+  { id: 'local', label: 'On-device', hint: 'always use the built-in rule checkers' },
+  { id: 'remote', label: 'Server', hint: 'always ask the SonGul gateway' },
+];
+
 export default function SettingsDialog({ settings, onChange, onClose }: Props) {
+  const [testState, setTestState] = useState<
+    { kind: 'idle' } | { kind: 'testing' } | { kind: 'ok'; detail: string } | { kind: 'fail'; detail: string }
+  >({ kind: 'idle' });
+
+  async function testConnection() {
+    setTestState({ kind: 'testing' });
+    try {
+      const health = await checkGateway(settings.serverUrl);
+      setTestState({
+        kind: 'ok',
+        detail: `${health.service} v${health.version} · provider: ${health.activeProvider}`,
+      });
+    } catch (err) {
+      setTestState({
+        kind: 'fail',
+        detail: err instanceof Error ? err.message : 'unreachable',
+      });
+    }
+  }
+
   return (
     <Modal title="Settings · 설정" onClose={onClose} wide>
       <div className="settings-row">
@@ -69,8 +97,59 @@ export default function SettingsDialog({ settings, onChange, onClose }: Props) {
         />
       </div>
 
+      <div className="settings-block">
+        <strong>SonGul AI · 피드백 엔진</strong>
+        <label className="field-label" htmlFor="ai-mode">
+          Feedback engine
+        </label>
+        <select
+          id="ai-mode"
+          className="field"
+          value={settings.aiMode}
+          onChange={(e) => onChange({ aiMode: e.target.value as AiMode })}
+        >
+          {AI_MODES.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label} — {m.hint}
+            </option>
+          ))}
+        </select>
+        <label className="field-label" htmlFor="ai-url">
+          Feedback server URL
+        </label>
+        <input
+          id="ai-url"
+          className="field"
+          type="url"
+          inputMode="url"
+          placeholder="http://192.168.0.10:8787"
+          value={settings.serverUrl}
+          onChange={(e) => {
+            setTestState({ kind: 'idle' });
+            onChange({ serverUrl: e.target.value });
+          }}
+        />
+        <div className="ai-test-row">
+          <button
+            className="btn btn-quiet"
+            disabled={!settings.serverUrl.trim() || testState.kind === 'testing'}
+            onClick={() => void testConnection()}
+          >
+            {testState.kind === 'testing' ? 'Testing…' : 'Test connection'}
+          </button>
+          {testState.kind === 'ok' && <span className="ai-status ok">{testState.detail}</span>}
+          {testState.kind === 'fail' && <span className="ai-status fail">{testState.detail}</span>}
+        </div>
+        <p className="settings-hint">
+          Run <code>npm run server</code> on your computer and enter its LAN address here. The
+          same gateway hosts the real SonGul AI later — the app already sends handwriting
+          strokes and images with every check, so nothing else changes. Feedback falls back to
+          the on-device checkers whenever the server is unreachable.
+        </p>
+      </div>
+
       <p className="settings-hint about-line">
-        SonGul Note v0.1 — local-first. All notes are stored on this device (IndexedDB). Use
+        SonGul Note v0.2 — local-first. All notes are stored on this device (IndexedDB). Use
         Export → .songul for backups.
       </p>
     </Modal>

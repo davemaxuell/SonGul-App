@@ -4,3 +4,5 @@ dist/
 *.local
 .vercel
 .playwright-mcp/
+server/data/
+server/.env

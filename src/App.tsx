@@ -20,7 +20,12 @@ export default function App() {
     })();
   }, []);
 
-  if (!settings) return <div className="boot-screen">손</div>;
+  if (!settings)
+    return (
+      <div className="boot-screen">
+        <img src="/assets/SonGul-LOGO.png" alt="SonGul" />
+      </div>
+    );
 
   const updateSettings = (patch: Partial<Settings>) => {
     const next = { ...settings, ...patch };
@@ -30,6 +35,7 @@ export default function App() {
 
   return (
     <>
+      <div className="sheet-bg" aria-hidden="true" />
       {screen.name === 'library' ? (
         <LibraryScreen
           settings={settings}

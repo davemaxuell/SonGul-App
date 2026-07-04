@@ -252,6 +252,17 @@ export function checkKorean(text: string): Finding[] {
   return out;
 }
 
+/** apply findings to text to produce the corrected sentence (client panel and
+    server gateway share this so "corrected" always means the same thing) */
+export function applyFindings(text: string, findings: Finding[]): string {
+  let out = text;
+  const spans = findings.filter((f) => f.end > f.start).sort((a, b) => b.start - a.start);
+  for (const f of spans) {
+    out = out.slice(0, f.start) + f.suggestion + out.slice(f.end);
+  }
+  return out;
+}
+
 export const FINDING_LABELS: Record<Finding['type'], { ko: string; en: string }> = {
   spacing: { ko: '띄어쓰기', en: 'Spacing' },
   grammar: { ko: '문법', en: 'Grammar' },

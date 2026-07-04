@@ -1,5 +1,6 @@
 // SonGul Note - minimal offline cache (local-first shell).
-const CACHE = 'songul-v1';
+const CACHE = 'songul-v2';
+const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (e) => self.skipWaiting());
 self.addEventListener('activate', (e) => {
@@ -12,13 +13,16 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  if (e.request.method !== 'GET') return;
+  // brand fonts: cached too, so the look survives offline after first load
+  const cacheable = url.origin === location.origin || FONT_HOSTS.includes(url.hostname);
+  if (!cacheable) return;
   e.respondWith(
     caches.match(e.request).then(
       (hit) =>
         hit ||
         fetch(e.request).then((res) => {
-          if (res.ok) {
+          if (res.ok || res.type === 'opaque') {
             const clone = res.clone();
             caches.open(CACHE).then((c) => c.put(e.request, clone));
           }

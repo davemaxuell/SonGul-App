@@ -104,6 +104,8 @@ export interface FeedbackResult {
   bbox?: BBox | null;
 }
 
+export type AiMode = 'auto' | 'local' | 'remote';
+
 export interface Settings {
   /** allow finger (touch) input to draw instead of pan */
   fingerDraws: boolean;
@@ -112,6 +114,10 @@ export interface Settings {
   /** 0.5..1.5 pressure response multiplier */
   pressureGain: number;
   defaultTemplate: TemplateId;
+  /** feedback engine: auto = server when configured & healthy, else on-device */
+  aiMode: AiMode;
+  /** SonGul feedback gateway base URL, e.g. http://192.168.0.10:8787 */
+  serverUrl: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -119,4 +125,6 @@ export const DEFAULT_SETTINGS: Settings = {
   pressure: true,
   pressureGain: 1,
   defaultTemplate: 'lined',
+  aiMode: 'auto',
+  serverUrl: '',
 };
