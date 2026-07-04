@@ -46,8 +46,21 @@ cd android && ./gradlew assembleDebug   # needs JDK 21 + Android SDK
 Install on a Galaxy Tab: copy `app-debug.apk` over (or share via Drive), tap
 it, allow "install unknown apps" for your file manager, open **SonGul**.
 Everything works offline (notes, ink, templates, on-device feedback,
-practice pages). Known WebView limits in the APK shell: PDF/.songul *export*
-downloads may be inert — use the browser PWA for exports for now.
+practice pages). Since v0.3, PDF/PNG/`.songul` exports inside the APK open
+the Android share sheet (save to Files, Drive, etc.).
+
+## Release (Play Store)
+
+```powershell
+npm run build
+npx cap sync android
+android\gradlew.bat -p android bundleRelease --console=plain
+```
+
+Signed `.aab` lands in `android/app/build/outputs/bundle/release/`. Signing uses the
+gitignored `android/songul-upload.jks` + `android/key.properties` — **keep backups of
+both**. Full submission walkthrough (listing copy, data-safety answers, internal
+testing track): [docs/PLAY_STORE.md](docs/PLAY_STORE.md).
 
 ## The feedback service (what the backend is for)
 
