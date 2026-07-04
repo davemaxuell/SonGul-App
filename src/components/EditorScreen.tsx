@@ -38,10 +38,11 @@ interface Stacks {
 interface Props {
   notebook: Notebook;
   settings: Settings;
+  initialJump?: { pageId: string; bbox: BBox | null };
   onBack: () => void;
 }
 
-export default function EditorScreen({ notebook, settings, onBack }: Props) {
+export default function EditorScreen({ notebook, settings, initialJump, onBack }: Props) {
   const [pages, setPages] = useState<Page[]>([]);
   const [currentPageId, setCurrentPageId] = useState<string | null>(null);
   const strokesRef = useRef<Stroke[]>([]);
@@ -87,8 +88,14 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
     void (async () => {
       const list = await db.listPages(notebook.id);
       setPages(list);
-      if (list.length > 0) setCurrentPageId(list[0].id);
+      if (initialJump && list.some((pg) => pg.id === initialJump.pageId)) {
+        setCurrentPageId(initialJump.pageId);
+        if (initialJump.bbox) setHighlights([initialJump.bbox]);
+      } else if (list.length > 0) {
+        setCurrentPageId(list[0].id);
+      }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notebook.id]);
 
   useEffect(() => {

@@ -1,8 +1,10 @@
 // Library: notebook covers styled like physical practice books, with the
 // manuscript-square window as the SonGul mark.
-import { useEffect, useState } from 'react';
-import type { Notebook, Settings, TemplateId } from '../types';
+import { useEffect, useMemo, useState } from 'react';
+import type { BBox, Notebook, RecognitionRecord, Settings, TemplateId } from '../types';
 import * as db from '../db';
+import { jamoIncludes } from '../recognition/jamo';
+import { inkRecognitionAvailable } from '../recognition/songulInk';
 import { uid } from '../ids';
 import { TEMPLATES } from '../templates';
 import { importPdfIntoNotebook } from '../pdf/importPdf';
@@ -22,10 +24,11 @@ function coverClass(id: string): string {
 interface Props {
   settings: Settings;
   onOpen: (nb: Notebook) => void;
+  onOpenAt: (nb: Notebook, pageId: string, bbox: BBox | null) => void;
   onOpenSettings: () => void;
 }
 
-export default function LibraryScreen({ settings, onOpen, onOpenSettings }: Props) {
+export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettings }: Props) {
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [pageCounts, setPageCounts] = useState<Record<string, number>>({});
   const [newOpen, setNewOpen] = useState(false);
@@ -35,6 +38,38 @@ export default function LibraryScreen({ settings, onOpen, onOpenSettings }: Prop
   const [renameTitle, setRenameTitle] = useState('');
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [hits, setHits] = useState<RecognitionRecord[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setHits([]);
+      return;
+    }
+    setSearching(true);
+    const handle = setTimeout(() => {
+      void (async () => {
+        try {
+          const all = await db.listAllRecognition();
+          setHits(
+            all
+              .filter((r) => r.status === 'ok' && jamoIncludes(r.text, query))
+              .sort((a, b) => b.timestamp - a.timestamp)
+              .slice(0, 30)
+          );
+        } finally {
+          setSearching(false);
+        }
+      })();
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [query]);
+
+  const notebookOf = useMemo(() => {
+    const m = new Map(notebooks.map((nb) => [nb.id, nb]));
+    return (id: string) => m.get(id);
+  }, [notebooks]);
 
   async function refresh() {
     const list = await db.listNotebooks();
@@ -127,6 +162,14 @@ export default function LibraryScreen({ settings, onOpen, onOpenSettings }: Prop
           </span>
         </div>
         <div className="library-actions">
+          <input
+            className="field search-field"
+            type="search"
+            placeholder="손글씨 검색 · Search handwriting"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search handwriting"
+          />
           <label className="btn btn-quiet file-btn">
             Import PDF
             <input
@@ -159,6 +202,36 @@ export default function LibraryScreen({ settings, onOpen, onOpenSettings }: Prop
           </button>
         </div>
       </header>
+
+      {query.trim() && (
+        <div className="search-results" role="list">
+          {searching && hits.length === 0 && <p className="panel-hint">Searching…</p>}
+          {!searching && hits.length === 0 && (
+            <p className="panel-hint">
+              No matches.
+              {!inkRecognitionAvailable() &&
+                ' Handwriting search indexes notes written on the Android app.'}
+            </p>
+          )}
+          {hits.map((h) => {
+            const nb = notebookOf(h.notebookId);
+            if (!nb) return null;
+            return (
+              <button
+                key={h.key}
+                className="search-hit"
+                role="listitem"
+                onClick={() => onOpenAt(nb, h.pageId, h.bbox)}
+              >
+                <span className="search-hit-text">{h.text}</span>
+                <span className="search-hit-meta">
+                  {nb.title} · {new Date(h.timestamp).toLocaleDateString()}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {notebooks.length === 0 ? (
         <div className="library-empty">

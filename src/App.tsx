@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import type { Notebook, Settings } from './types';
+import type { BBox, Notebook, Settings } from './types';
 import { DEFAULT_SETTINGS } from './types';
 import * as db from './db';
 import LibraryScreen from './components/LibraryScreen';
 import EditorScreen from './components/EditorScreen';
 import SettingsDialog from './components/SettingsDialog';
 
-type Screen = { name: 'library' } | { name: 'editor'; notebook: Notebook };
+type Screen =
+  | { name: 'library' }
+  | { name: 'editor'; notebook: Notebook; jump?: { pageId: string; bbox: BBox | null } };
 
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -40,6 +42,9 @@ export default function App() {
         <LibraryScreen
           settings={settings}
           onOpen={(notebook) => setScreen({ name: 'editor', notebook })}
+          onOpenAt={(notebook, pageId, bbox) =>
+            setScreen({ name: 'editor', notebook, jump: { pageId, bbox } })
+          }
           onOpenSettings={() => setSettingsOpen(true)}
         />
       ) : (
@@ -47,6 +52,7 @@ export default function App() {
           key={screen.notebook.id}
           notebook={screen.notebook}
           settings={settings}
+          initialJump={screen.jump}
           onBack={() => setScreen({ name: 'library' })}
         />
       )}
