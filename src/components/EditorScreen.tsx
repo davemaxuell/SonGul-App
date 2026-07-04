@@ -11,6 +11,9 @@ import { bboxOfStrokes } from '../ink/geometry';
 import { importPdfIntoNotebook } from '../pdf/importPdf';
 import { exportNotebookPdf, exportPagePng, downloadBlob } from '../pdf/exportPdf';
 import { exportBundle } from '../bundle';
+import { RecognitionScheduler } from '../recognition/scheduler';
+import { mlkitProvider } from '../feedback/recognition';
+import { inkRecognitionAvailable } from '../recognition/songulInk';
 import CanvasSurface, {
   type SelectionAction,
   type SelectionState,
@@ -64,6 +67,17 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
 
   const stacksRef = useRef<Map<string, Stacks>>(new Map());
   const clipboardRef = useRef<Stroke[]>([]);
+  const schedulerRef = useRef<RecognitionScheduler | null>(null);
+
+  useEffect(() => {
+    if (!inkRecognitionAvailable()) return;
+    const scheduler = new RecognitionScheduler({ notebookId: notebook.id, provider: mlkitProvider });
+    schedulerRef.current = scheduler;
+    return () => {
+      scheduler.dispose();
+      schedulerRef.current = null;
+    };
+  }, [notebook.id]);
 
   const currentPage = pages.find((p) => p.id === currentPageId) ?? null;
 
@@ -88,6 +102,7 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
       setBgBitmap(bitmap);
       setSelection(null);
       setRenderVersion((v) => v + 1);
+      schedulerRef.current?.loadPage(currentPage.id, strokesRef.current);
     })();
     return () => {
       cancelled = true;
@@ -150,6 +165,8 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
     }
     setSelection(null);
     bump();
+    // undo/redo can resurrect or remove strokes — rebuild the page's clusters
+    if (currentPageId) schedulerRef.current?.loadPage(currentPageId, strokesRef.current);
   }
 
   const undo = useCallback(() => {
@@ -179,6 +196,7 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
       strokesRef.current.push(stroke);
       void db.putStroke(stroke);
       pushOp({ kind: 'add', ids: [stroke.id] });
+      schedulerRef.current?.noteStroke(stroke.pageId, stroke);
       bump();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,6 +207,7 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
     (ids: string[]) => {
       void persistIds(ids);
       pushOp({ kind: 'erase', ids });
+      if (currentPageId) schedulerRef.current?.noteRemoved(currentPageId, ids);
       bump();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -199,6 +218,7 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
     (before: TransformSnap[], after: TransformSnap[]) => {
       void persistIds(after.map((s) => s.id));
       pushOp({ kind: 'transform', before, after });
+      if (currentPageId) schedulerRef.current?.noteChanged(currentPageId, after.map((x) => x.id));
       bump();
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -227,6 +247,7 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
     strokesRef.current.push(...clones);
     void db.putStrokes(clones);
     pushOp({ kind: 'add', ids: clones.map((s) => s.id) });
+    for (const c of clones) schedulerRef.current?.noteStroke(c.pageId, c);
     const bbox = bboxOfStrokes(clones);
     if (bbox) setSelection({ ids: clones.map((s) => s.id), bbox });
     setTool('lasso');
@@ -246,6 +267,7 @@ export default function EditorScreen({ notebook, settings, onBack }: Props) {
         for (const s of strokes) s.deleted = true;
         void persistIds(strokes.map((s) => s.id));
         pushOp({ kind: 'erase', ids: strokes.map((s) => s.id) });
+        if (currentPageId) schedulerRef.current?.noteRemoved(currentPageId, strokes.map((x) => x.id));
         setSelection(null);
         bump();
       } else if (action === 'analyze') {
