@@ -26,7 +26,7 @@ SonGul to the browser.
 | M3 Storage | ✅ IndexedDB, per-stroke commit writes (crash-safe), tombstones, `.songul` bundle. ⏳ Formal op-log table + snapshots deferred |
 | M4 Editor features | ✅ Thumbnails, 7 templates, lasso select/move/resize/copy/paste/delete. ⏳ Shape assist, image/text-box insert deferred |
 | M5 PDF | ✅ Import → immutable page backgrounds, annotate, export annotated PDF (vector ink), PNG export |
-| M6 Recognition | ✅ Adapter interface + mock provider (manual text entry). ⏳ Real provider + handwriting search deferred |
+| M6 Recognition | ✅ v0.3: ML Kit Digital Ink on Android (SongulInk Capacitor plugin), live per-line background recognition, handwritten search with jamo matching, Analyze pre-fill, CER bench page. Browser PWA keeps manual entry. |
 | M7 Korean feedback | ✅ Feedback panel, spacing/particle/spelling/register checkers with bilingual explanations, highlight overlay, history, result schema per plan |
 | M8 Practice mode | ✅ v0 — recurring-mistake aggregation + generated tracing practice pages |
 | M9–M11 Cloud/collab/hardening | ❌ Out of scope per plan §2.4 |
