@@ -7,5 +7,5 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 export default defineConfig({
   plugins: [react()],
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
-  server: { host: true, port: 5173 },
+  server: { host: true, port: Number(process.env.PORT) || 5173 },
 });
