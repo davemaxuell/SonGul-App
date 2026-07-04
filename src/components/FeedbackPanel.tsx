@@ -9,6 +9,7 @@ import { uid } from '../ids';
 import { applyFindings, FINDING_LABELS } from '../feedback/korean';
 import { analyzeSmart, type EngineResult } from '../feedback/client';
 import { defaultProviderId, getProvider, providers } from '../feedback/recognition';
+import { prefillFromClusters } from '../recognition/prefill';
 
 export interface AnalysisRequest {
   imageUrl: string | null;
@@ -55,12 +56,24 @@ export default function FeedbackPanel(p: Props) {
     setFindings(null);
     setText('');
     setRecognizing(true);
-    getProvider(providerId)
-      .recognize({ strokes: p.request?.strokes ?? [], language: 'ko' })
-      .then((r) => {
+    void (async () => {
+      try {
+        const cached = await prefillFromClusters(p.page.id, p.request?.strokes ?? []);
+        if (cached) {
+          setText(cached);
+          return;
+        }
+        const r = await getProvider(providerId).recognize({
+          strokes: p.request?.strokes ?? [],
+          language: 'ko',
+        });
         if (r.text) setText(r.text);
-      })
-      .finally(() => setRecognizing(false));
+      } catch {
+        // recognition is best-effort; manual entry remains
+      } finally {
+        setRecognizing(false);
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.request]);
 
