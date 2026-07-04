@@ -8,7 +8,7 @@ import * as db from '../db';
 import { uid } from '../ids';
 import { applyFindings, FINDING_LABELS } from '../feedback/korean';
 import { analyzeSmart, type EngineResult } from '../feedback/client';
-import { getProvider, providers } from '../feedback/recognition';
+import { defaultProviderId, getProvider, providers } from '../feedback/recognition';
 
 export interface AnalysisRequest {
   imageUrl: string | null;
@@ -36,7 +36,7 @@ function severityClass(s: Finding['severity']): string {
 
 export default function FeedbackPanel(p: Props) {
   const [tab, setTab] = useState<'check' | 'history' | 'practice'>('check');
-  const [providerId, setProviderId] = useState('mock');
+  const [providerId, setProviderId] = useState(defaultProviderId());
   const [text, setText] = useState('');
   const [findings, setFindings] = useState<Finding[] | null>(null);
   const [engineMeta, setEngineMeta] = useState<EngineResult | null>(null);
@@ -56,7 +56,7 @@ export default function FeedbackPanel(p: Props) {
     setText('');
     setRecognizing(true);
     getProvider(providerId)
-      .recognize({ strokes: [], language: 'ko' })
+      .recognize({ strokes: p.request?.strokes ?? [], language: 'ko' })
       .then((r) => {
         if (r.text) setText(r.text);
       })
