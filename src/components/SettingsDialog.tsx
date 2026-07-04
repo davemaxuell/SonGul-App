@@ -348,7 +348,14 @@ export default function SettingsDialog({ settings, onChange, onOpenBench, onClos
 
       <p className="settings-hint about-line">
         SonGul Note v{__APP_VERSION__} — local-first. All notes are stored on this device
-        (IndexedDB). Use Export → .songul for backups.
+        (IndexedDB). Use Export → .songul for backups.{' '}
+        <a
+          href="https://son-gul-web-ui.vercel.app/privacy.html"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Privacy policy · 개인정보 처리방침
+        </a>
       </p>
     </Modal>
   );
