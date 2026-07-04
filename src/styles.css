@@ -1448,3 +1448,53 @@ textarea:focus-visible {
   font-size: 0.82rem;
   opacity: 0.65;
 }
+
+/* ---- recognition bench (v0.3) ---- */
+.bench-screen {
+  min-height: 100vh;
+}
+.bench-title {
+  font-size: 1.1rem;
+  margin: 0;
+}
+.bench-body {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 20px 24px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bench-canvas {
+  width: 100%;
+  border: 1.5px solid rgba(35, 36, 77, 0.25);
+  border-radius: 12px;
+  background: #fffdf6;
+  touch-action: none;
+}
+.bench-actions {
+  display: flex;
+  gap: 10px;
+}
+.bench-results {
+  border-top: 1px solid rgba(35, 36, 77, 0.14);
+  padding-top: 12px;
+}
+.bench-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 60px;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(35, 36, 77, 0.1);
+}
+.bench-recognized {
+  opacity: 0.8;
+}
+.bench-good {
+  color: #3f9b66;
+  font-weight: 700;
+}
+.bench-bad {
+  color: #c8463b;
+  font-weight: 700;
+}

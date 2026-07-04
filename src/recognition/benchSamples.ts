@@ -1,0 +1,23 @@
+// Fixed sample set for the recognition quality bench (plan.md M6 deliverable).
+export const BENCH_SAMPLES: string[] = [
+  '안녕하세요',
+  '한국어',
+  '감사합니다',
+  '학교',
+  '친구',
+  '사랑',
+  '가나다',
+  '바쁘다',
+  '주말에 뭐 해요?',
+  '저는 학생입니다',
+  '한국어를 공부해요',
+  '내일 만나요',
+  '책을 읽어요',
+  '날씨가 좋아요',
+  '이번 주',
+  '할 수 있어요',
+  '먹고 싶어요',
+  '도서관에 가요',
+  '물 한 잔 주세요',
+  '천천히 말해 주세요',
+];

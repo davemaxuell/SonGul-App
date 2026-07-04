@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import type { AiMode, Settings } from '../types';
 import { checkGateway } from '../feedback/client';
+import { SongulInk, inkRecognitionAvailable } from '../recognition/songulInk';
 import Modal from './Modal';
 import TemplatePicker from './TemplatePicker';
 
 interface Props {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
+  onOpenBench?: () => void;
   onClose: () => void;
 }
 
@@ -16,10 +18,24 @@ const AI_MODES: { id: AiMode; label: string; hint: string }[] = [
   { id: 'remote', label: 'Server', hint: 'always ask the SonGul gateway' },
 ];
 
-export default function SettingsDialog({ settings, onChange, onClose }: Props) {
+export default function SettingsDialog({ settings, onChange, onOpenBench, onClose }: Props) {
   const [testState, setTestState] = useState<
     { kind: 'idle' } | { kind: 'testing' } | { kind: 'ok'; detail: string } | { kind: 'fail'; detail: string }
   >({ kind: 'idle' });
+  const [modelState, setModelState] = useState<
+    { kind: 'idle' } | { kind: 'working' } | { kind: 'ok' } | { kind: 'fail'; detail: string }
+  >({ kind: 'idle' });
+
+  async function downloadModel() {
+    setModelState({ kind: 'working' });
+    try {
+      const r = await SongulInk.ensureModel({ language: 'ko' });
+      if (r.status === 'downloaded') setModelState({ kind: 'ok' });
+      else setModelState({ kind: 'fail', detail: r.message ?? 'download failed' });
+    } catch (err) {
+      setModelState({ kind: 'fail', detail: err instanceof Error ? err.message : 'failed' });
+    }
+  }
 
   async function testConnection() {
     setTestState({ kind: 'testing' });
@@ -146,6 +162,41 @@ export default function SettingsDialog({ settings, onChange, onClose }: Props) {
           strokes and images with every check, so nothing else changes. Feedback falls back to
           the on-device checkers whenever the server is unreachable.
         </p>
+      </div>
+
+      <div className="settings-block">
+        <strong>Handwriting recognition · 손글씨 인식</strong>
+        {inkRecognitionAvailable() ? (
+          <>
+            <div className="ai-test-row">
+              <button
+                className="btn btn-quiet"
+                disabled={modelState.kind === 'working'}
+                onClick={() => void downloadModel()}
+              >
+                {modelState.kind === 'working' ? 'Checking…' : 'Download / check Korean model'}
+              </button>
+              {modelState.kind === 'ok' && <span className="ai-status ok">Korean model ready</span>}
+              {modelState.kind === 'fail' && (
+                <span className="ai-status fail">{modelState.detail}</span>
+              )}
+            </div>
+            <p className="settings-hint">
+              Recognition runs fully on this device (ML Kit). The Korean model (~20 MB)
+              downloads once, then works offline.
+            </p>
+          </>
+        ) : (
+          <p className="settings-hint">
+            On-device handwriting recognition is available in the SonGul Android app. In the
+            browser, type the text to check manually.
+          </p>
+        )}
+        {onOpenBench && (
+          <button className="btn btn-quiet" onClick={onOpenBench}>
+            Recognition bench · 인식 벤치 열기
+          </button>
+        )}
       </div>
 
       <p className="settings-hint about-line">

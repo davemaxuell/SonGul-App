@@ -5,10 +5,12 @@ import * as db from './db';
 import LibraryScreen from './components/LibraryScreen';
 import EditorScreen from './components/EditorScreen';
 import SettingsDialog from './components/SettingsDialog';
+import BenchScreen from './components/BenchScreen';
 
 type Screen =
   | { name: 'library' }
-  | { name: 'editor'; notebook: Notebook; jump?: { pageId: string; bbox: BBox | null } };
+  | { name: 'editor'; notebook: Notebook; jump?: { pageId: string; bbox: BBox | null } }
+  | { name: 'bench' };
 
 export default function App() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -47,7 +49,7 @@ export default function App() {
           }
           onOpenSettings={() => setSettingsOpen(true)}
         />
-      ) : (
+      ) : screen.name === 'editor' ? (
         <EditorScreen
           key={screen.notebook.id}
           notebook={screen.notebook}
@@ -55,11 +57,17 @@ export default function App() {
           initialJump={screen.jump}
           onBack={() => setScreen({ name: 'library' })}
         />
+      ) : (
+        <BenchScreen onBack={() => setScreen({ name: 'library' })} />
       )}
       {settingsOpen && (
         <SettingsDialog
           settings={settings}
           onChange={updateSettings}
+          onOpenBench={() => {
+            setSettingsOpen(false);
+            setScreen({ name: 'bench' });
+          }}
           onClose={() => setSettingsOpen(false)}
         />
       )}
