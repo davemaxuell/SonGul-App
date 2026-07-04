@@ -29,7 +29,8 @@ SonGul to the browser.
 | M6 Recognition | ✅ v0.3: ML Kit Digital Ink on Android (SongulInk Capacitor plugin), live per-line background recognition, handwritten search with jamo matching, Analyze pre-fill, CER bench page. Browser PWA keeps manual entry. |
 | M7 Korean feedback | ✅ Feedback panel, spacing/particle/spelling/register checkers with bilingual explanations, highlight overlay, history, result schema per plan |
 | M8 Practice mode | ✅ v0 — recurring-mistake aggregation + generated tracing practice pages |
-| M9–M11 Cloud/collab/hardening | ❌ Out of scope per plan §2.4 |
+| M9 Cloud (subset) | ✅ v0.3: Supabase email/password accounts, whole-notebook cloud backup/restore (`backups` bucket + manifest table, RLS), auto-backup on close with offline retry queue, in-app account deletion. Delta sync still deferred. Setup: [SUPABASE_SETUP.md](SUPABASE_SETUP.md) |
+| M10–M11 Collab/hardening | ❌ Out of scope per plan §2.4 |
 
 ## Korean checker v0 — rule inventory
 
