@@ -16,7 +16,7 @@ interface BundleV1 {
   pageImages: { pageId: string; dataB64: string }[];
 }
 
-async function blobToB64(blob: Blob): Promise<string> {
+export async function blobToB64(blob: Blob): Promise<string> {
   const buf = new Uint8Array(await blob.arrayBuffer());
   let bin = '';
   const CHUNK = 0x8000;

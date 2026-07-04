@@ -19,7 +19,7 @@ import { uid } from '../ids';
 import { TEMPLATES } from '../templates';
 import { importPdfIntoNotebook } from '../pdf/importPdf';
 import { exportBundle, importBundle } from '../bundle';
-import { downloadBlob } from '../pdf/exportPdf';
+import { saveBlob } from '../saveFile';
 import Modal from './Modal';
 import TemplatePicker from './TemplatePicker';
 
@@ -226,7 +226,7 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
     setBusy('Exporting backup…');
     try {
       const blob = await exportBundle(nb.id);
-      downloadBlob(blob, `${nb.title.replace(/[\\/:*?"<>|]/g, '_')}.songul`);
+      await saveBlob(blob, `${nb.title.replace(/[\\/:*?"<>|]/g, '_')}.songul`);
     } finally {
       setBusy(null);
     }

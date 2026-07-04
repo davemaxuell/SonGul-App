@@ -9,7 +9,8 @@ import { loadPageBitmap, dropPageBitmap } from '../pageBitmaps';
 import { drawStroke } from '../ink/render';
 import { bboxOfStrokes } from '../ink/geometry';
 import { importPdfIntoNotebook } from '../pdf/importPdf';
-import { exportNotebookPdf, exportPagePng, downloadBlob } from '../pdf/exportPdf';
+import { exportNotebookPdf, exportPagePng } from '../pdf/exportPdf';
+import { saveBlob } from '../saveFile';
 import { exportBundle } from '../bundle';
 import { autoBackupOnClose } from '../cloud/backup';
 import { RecognitionScheduler } from '../recognition/scheduler';
@@ -402,13 +403,13 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
           settings
         );
         const pageNum = pages.findIndex((p) => p.id === currentPage.id) + 1;
-        downloadBlob(blob, `${safeTitle}-p${pageNum}.png`);
+        await saveBlob(blob, `${safeTitle}-p${pageNum}.png`);
       } else if (kind === 'pdf') {
         const blob = await exportNotebookPdf(notebook, pages, settings);
-        downloadBlob(blob, `${safeTitle}.pdf`);
+        await saveBlob(blob, `${safeTitle}.pdf`);
       } else if (kind === 'bundle') {
         const blob = await exportBundle(notebook.id);
-        downloadBlob(blob, `${safeTitle}.songul`);
+        await saveBlob(blob, `${safeTitle}.songul`);
       }
     } catch (err) {
       alert('Export failed: ' + (err instanceof Error ? err.message : String(err)));
