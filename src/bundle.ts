@@ -72,7 +72,7 @@ export async function exportBundle(notebookId: string): Promise<Blob> {
   return new Blob([JSON.stringify(bundle)], { type: 'application/json' });
 }
 
-export async function importBundle(file: File): Promise<Notebook> {
+export async function importBundle(file: Blob): Promise<Notebook> {
   const bundle = JSON.parse(await file.text()) as BundleV1;
   if (bundle.format !== 'songul-bundle') throw new Error('Not a .songul bundle');
 
