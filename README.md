@@ -1,50 +1,88 @@
-# SonGul Note · 손글
+# SonGul · 손글 — learn Korean by hand
 
-A tablet-first handwriting notebook for Korean learners. Write naturally with a stylus,
-organize notebooks and pages, annotate PDF worksheets, and get feedback on Korean
-spacing (띄어쓰기), particles (조사), and spelling — fully offline, local-first.
+<p><img src="public/assets/SonGul-LOGO.png" alt="SonGul" width="220"></p>
 
-This is the **v0.1 MVP** described in [plan.md](./plan.md), implemented as a
-tablet-optimized web app (PWA). See [docs/PRODUCT_SPEC.md](./docs/PRODUCT_SPEC.md)
-for what is in this version and why the first platform is the web.
+A tablet-first handwriting app for Korean learners: write naturally with a
+stylus, organize notebooks, annotate PDF worksheets — and run every sentence
+through the SonGul feedback loop:
+
+> **Write → Check (교정) → Understand (explanations) → Practice (generated
+> pages) → Track (history & recurring mistakes).**
+
+v0.2 wears the official SonGul brand (warm writing-sheet paper, indigo pen,
+red-pen 교정, Gaegu accents — matched to the marketing site) and ships an
+**AI-ready feedback backend**: the app already sends handwriting strokes,
+a rendered image, and text with every check, so the real AI API later plugs
+into one server file with zero app changes.
 
 ## Run it
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # app        → http://localhost:5173  (listens on the LAN)
+npm run server     # feedback gateway → http://0.0.0.0:8787
 npm run build      # production build in dist/
 ```
 
-Open it on an iPad (Safari) or Galaxy Tab (Chrome) on the same network —
-`npm run dev` listens on the LAN. Apple Pencil and S Pen work through Pointer
-Events with pressure; fingers pan and pinch-zoom (palm rejection by pointer type).
+Open the app on an iPad (Safari) or Galaxy Tab (Chrome) on the same network.
+Apple Pencil and S Pen work through Pointer Events with pressure; fingers pan
+and pinch-zoom.
 
-## What works (v0.1)
+To use the gateway from a tablet: Settings → **SonGul AI** → enter
+`http://<your-pc-ip>:8787` → *Test connection*. Feedback then shows a
+`☁ rules-v0 · …ms` badge; if the server is unreachable it falls back to the
+on-device checkers automatically (`📱 on-device` badge + notice).
 
-- **Library** — create / rename / delete / duplicate-via-backup notebooks.
-- **Ink** — pressure-sensitive pen (variable-width vector outlines), highlighter
-  (multiply blend), stroke eraser, undo/redo (op stack), S Pen barrel-button eraser.
-- **Pages** — add / duplicate / delete / reorder; thumbnail sidebar; 7 templates
-  including 한글 연습 squares and TOPIK 원고지 manuscript grid.
-- **Storage** — local-first IndexedDB; every stroke is persisted on commit
-  (doubles as crash recovery); erased strokes are tombstoned, not destroyed.
-- **PDF** — import a worksheet (each page becomes an immutable background),
-  write over it, export the annotated notebook as PDF (ink stays vector) or
-  the current page as PNG. `.songul` JSON bundle for backup/transfer.
-- **교정 Korean feedback** — lasso a handwritten sentence → feedback panel:
-  pluggable recognition adapter (mock provider ships first; ML Kit/MyScript later),
-  rule-based checkers for spacing, particle agreement (을/를, 로/으로, 와/과),
-  spellings (됬→됐, 되요→돼요), speech-level consistency; bilingual explanations;
-  feedback history; recurring-mistake list; **practice page generator** that
-  builds a tracing sheet from your corrected sentences.
+## Android APK (mock product preview)
 
-## Data model
+The repo contains a Capacitor Android project (`android/`). To rebuild:
 
-Strokes are stored as vectors with full metadata (`id`, `pageId`, `deviceId`,
-points with pressure + timing, tool, width, color, tombstone flag) — matching the
-plan's stroke schema so recognition, sync, and the future native ink engines can
-reuse the same data.
+```bash
+npm run build && npx cap sync android
+cd android && ./gradlew assembleDebug   # needs JDK 21 + Android SDK
+# → android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Install on a Galaxy Tab: copy `app-debug.apk` over (or share via Drive), tap
+it, allow "install unknown apps" for your file manager, open **SonGul**.
+Everything works offline (notes, ink, templates, on-device feedback,
+practice pages). Known WebView limits in the APK shell: PDF/.songul *export*
+downloads may be inert — use the browser PWA for exports for now.
+
+## The feedback service (what the backend is for)
+
+```
+app FeedbackEngine ──► local rules (offline / APK default)
+        │
+        └────────────► server/ feedback gateway (v1 API)
+                          ├─ external-ai   ← the future AI plugs in HERE
+                          └─ rules-v0      (same checkKorean the app bundles)
+                          + content-hash cache · coalescing · async poll
+                          + timeout→fallback · latency logs
+```
+
+See [server/README.md](server/README.md) for the API, the fast-path design,
+and the 3-step runbook for plugging in the real AI. The wire contract both
+sides share is [src/feedback/contract.ts](src/feedback/contract.ts); the
+design decisions are in
+[docs/superpowers/specs/2026-07-04-songul-v02-brand-ai-backend-design.md](docs/superpowers/specs/2026-07-04-songul-v02-brand-ai-backend-design.md).
+
+## What works (v0.2)
+
+- **Library** — brand header with the SonGul logo; create / rename / delete /
+  backup notebooks with cover colors from the brand palette.
+- **Ink** — pressure-sensitive pen (vector outlines), highlighter, stroke
+  eraser, undo/redo, S Pen barrel-button eraser.
+- **Pages** — add / duplicate / delete / reorder; thumbnails; 7 templates
+  including 한글 연습 squares and TOPIK 원고지.
+- **Storage** — local-first IndexedDB; strokes persist on commit; tombstones.
+- **PDF** — import worksheets, annotate, export annotated PDF / PNG;
+  `.songul` bundles.
+- **교정 feedback** — lasso handwriting → panel; pluggable recognition
+  adapter; feedback engine with on-device rules **and** gateway mode
+  (provider + latency badge, cached flag, graceful fallback); bilingual
+  explanations; history; recurring mistakes; practice page generator.
+- **PWA** — installable, offline shell, brand icons, font caching.
 
 ## Repo layout
 
@@ -52,10 +90,12 @@ reuse the same data.
 src/
   ink/          geometry (outlines, hit-tests) + canvas rendering
   pdf/          pdfjs import, pdf-lib export
-  feedback/     Korean checkers + recognition adapter
+  feedback/     korean.ts checkers · client.ts engines · contract.ts wire types
   components/   Library, Editor, CanvasSurface, Toolbar, Sidebar, FeedbackPanel
   db.ts         IndexedDB layer   ·  bundle.ts  .songul export/import
-  templates.ts  page templates    ·  types.ts   data model
-docs/           product spec
+server/         zero-dependency feedback gateway (v1 API, provider chain)
+android/        Capacitor Android shell (debug APK)
+assets/         brand icon/splash sources   ·  public/assets/  logo + mascot
+docs/           product spec + design specs
 plan.md         full product plan (all milestones)
 ```

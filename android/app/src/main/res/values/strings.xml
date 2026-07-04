@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SonGul</string>
+    <string name="title_activity_main">SonGul</string>
+    <string name="package_name">com.songul.note</string>
+    <string name="custom_url_scheme">com.songul.note</string>
+</resources>
