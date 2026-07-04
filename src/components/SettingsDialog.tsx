@@ -347,8 +347,8 @@ export default function SettingsDialog({ settings, onChange, onOpenBench, onClos
       </div>
 
       <p className="settings-hint about-line">
-        SonGul Note v0.2 — local-first. All notes are stored on this device (IndexedDB). Use
-        Export → .songul for backups.
+        SonGul Note v{__APP_VERSION__} — local-first. All notes are stored on this device
+        (IndexedDB). Use Export → .songul for backups.
       </p>
     </Modal>
   );
