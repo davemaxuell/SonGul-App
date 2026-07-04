@@ -1498,3 +1498,38 @@ textarea:focus-visible {
   color: #c8463b;
   font-weight: 700;
 }
+
+/* ---- cloud backups (v0.3) ---- */
+.cloud-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cloud-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid rgba(35, 36, 77, 0.14);
+  border-radius: 10px;
+  background: var(--surface, #fffdf6);
+}
+.cloud-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cloud-row-title {
+  font-weight: 600;
+}
+.cloud-row-meta {
+  font-size: 0.82rem;
+  opacity: 0.65;
+}
+.cloud-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}

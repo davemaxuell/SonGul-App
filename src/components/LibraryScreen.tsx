@@ -5,6 +5,16 @@ import type { BBox, Notebook, RecognitionRecord, Settings, TemplateId } from '..
 import * as db from '../db';
 import { jamoIncludes } from '../recognition/jamo';
 import { inkRecognitionAvailable } from '../recognition/songulInk';
+import { cloudConfigured } from '../cloud/supabase';
+import { useCloudUser } from '../cloud/useCloudUser';
+import {
+  backupNotebook,
+  deleteBackup,
+  listCloudBackups,
+  restoreBackup,
+  type CloudBackupRow,
+} from '../cloud/backup';
+import { flushPending } from '../cloud/queue';
 import { uid } from '../ids';
 import { TEMPLATES } from '../templates';
 import { importPdfIntoNotebook } from '../pdf/importPdf';
@@ -70,6 +80,84 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
     const m = new Map(notebooks.map((nb) => [nb.id, nb]));
     return (id: string) => m.get(id);
   }, [notebooks]);
+
+  const cloudUser = useCloudUser();
+  const [cloudOpen, setCloudOpen] = useState(false);
+  const [cloudRows, setCloudRows] = useState<CloudBackupRow[] | null>(null);
+
+  async function refreshCloud() {
+    try {
+      setCloudRows(await listCloudBackups());
+    } catch (err) {
+      alert('Could not load cloud backups: ' + (err instanceof Error ? err.message : String(err)));
+      setCloudRows([]);
+    }
+  }
+
+  useEffect(() => {
+    if (cloudOpen && cloudUser) void refreshCloud();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudOpen, cloudUser]);
+
+  // retry queued auto-backups on load and when connectivity returns
+  useEffect(() => {
+    if (!cloudConfigured()) return;
+    const flush = () =>
+      void flushPending(async (id) => {
+        const nb = await db.getNotebook(id);
+        if (nb) await backupNotebook(nb);
+      });
+    flush();
+    window.addEventListener('online', flush);
+    return () => window.removeEventListener('online', flush);
+  }, []);
+
+  async function backupNb(nb: Notebook) {
+    setBusy('Backing up to cloud…');
+    try {
+      await backupNotebook(nb);
+    } catch (err) {
+      alert('Backup failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function restoreRow(row: CloudBackupRow) {
+    setBusy('Restoring from cloud…');
+    try {
+      const nb = await restoreBackup(row);
+      const original = notebookOf(row.notebook_id);
+      if (
+        original &&
+        window.confirm(
+          `Replace the local copy of "${original.title}" with the restored backup? (Cancel keeps both.)`
+        )
+      ) {
+        await db.deleteNotebookCascade(original.id);
+      }
+      await refresh();
+      setCloudOpen(false);
+      onOpen(nb);
+    } catch (err) {
+      alert('Restore failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deleteRow(row: CloudBackupRow) {
+    if (!window.confirm(`Delete the cloud backup of "${row.title}"? Local notes stay.`)) return;
+    setBusy('Deleting cloud backup…');
+    try {
+      await deleteBackup(row);
+      await refreshCloud();
+    } catch (err) {
+      alert('Delete failed: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function refresh() {
     const list = await db.listNotebooks();
@@ -194,6 +282,11 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
               }}
             />
           </label>
+          {cloudConfigured() && (
+            <button className="btn btn-quiet" onClick={() => setCloudOpen(true)}>
+              Cloud
+            </button>
+          )}
           <button className="btn btn-quiet" onClick={onOpenSettings}>
             Settings
           </button>
@@ -292,6 +385,16 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
                     >
                       Export .songul
                     </button>
+                    {cloudConfigured() && cloudUser && (
+                      <button
+                        onClick={() => {
+                          void backupNb(nb);
+                          setMenuFor(null);
+                        }}
+                      >
+                        Back up to cloud
+                      </button>
+                    )}
                     <button
                       className="danger"
                       onClick={() => {
@@ -363,6 +466,45 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
               Save
             </button>
           </div>
+        </Modal>
+      )}
+
+      {cloudOpen && (
+        <Modal title="Cloud backups · 클라우드 백업" onClose={() => setCloudOpen(false)} wide>
+          {!cloudUser ? (
+            <p className="panel-hint">
+              Sign in first — Settings → Account & cloud backup.
+            </p>
+          ) : cloudRows === null ? (
+            <p className="panel-hint">Loading…</p>
+          ) : cloudRows.length === 0 ? (
+            <p className="panel-hint">
+              No cloud backups yet. Use a notebook's ⋯ menu → "Back up to cloud".
+            </p>
+          ) : (
+            <div className="cloud-list">
+              {cloudRows.map((row) => (
+                <div key={row.notebook_id} className="cloud-row">
+                  <div className="cloud-row-text">
+                    <span className="cloud-row-title">{row.title}</span>
+                    <span className="cloud-row-meta">
+                      {row.page_count} page{row.page_count === 1 ? '' : 's'} ·{' '}
+                      {Math.max(1, Math.round(row.size_bytes / 1024))} KB ·{' '}
+                      {new Date(row.updated_at).toLocaleString()} · {row.device_name}
+                    </span>
+                  </div>
+                  <div className="cloud-row-actions">
+                    <button className="btn btn-quiet" onClick={() => void restoreRow(row)}>
+                      Restore
+                    </button>
+                    <button className="btn btn-quiet danger" onClick={() => void deleteRow(row)}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Modal>
       )}
 
