@@ -133,6 +133,8 @@ export interface Settings {
   aiMode: AiMode;
   /** SonGul feedback gateway base URL, e.g. http://192.168.0.10:8787 */
   serverUrl: string;
+  /** auto-backup notebooks to the cloud on close (needs sign-in) */
+  autoBackup: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -142,4 +144,5 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultTemplate: 'lined',
   aiMode: 'auto',
   serverUrl: '',
+  autoBackup: false,
 };

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { AiMode, Settings } from '../types';
 import { checkGateway } from '../feedback/client';
 import { SongulInk, inkRecognitionAvailable } from '../recognition/songulInk';
+import { cloudConfigured, deleteAccount, signIn, signOut, signUp } from '../cloud/supabase';
+import { useCloudUser } from '../cloud/useCloudUser';
 import Modal from './Modal';
 import TemplatePicker from './TemplatePicker';
 
@@ -34,6 +36,53 @@ export default function SettingsDialog({ settings, onChange, onOpenBench, onClos
       else setModelState({ kind: 'fail', detail: r.message ?? 'download failed' });
     } catch (err) {
       setModelState({ kind: 'fail', detail: err instanceof Error ? err.message : 'failed' });
+    }
+  }
+
+  const user = useCloudUser();
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authNote, setAuthNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function doAuth(kind: 'in' | 'up') {
+    if (authBusy) return;
+    setAuthBusy(true);
+    setAuthNote(null);
+    try {
+      if (kind === 'in') {
+        await signIn(authEmail.trim(), authPassword);
+        setAuthNote({ ok: true, text: 'Signed in.' });
+      } else {
+        await signUp(authEmail.trim(), authPassword);
+        setAuthNote({
+          ok: true,
+          text: 'Account created. If email confirmation is enabled, confirm before signing in.',
+        });
+      }
+      setAuthPassword('');
+    } catch (err) {
+      setAuthNote({ ok: false, text: err instanceof Error ? err.message : 'failed' });
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function doDeleteAccount() {
+    if (
+      !window.confirm(
+        'Delete your account and every cloud backup? Notes on this device stay. This cannot be undone.'
+      )
+    )
+      return;
+    setAuthBusy(true);
+    try {
+      await deleteAccount();
+      setAuthNote({ ok: true, text: 'Account deleted.' });
+    } catch (err) {
+      setAuthNote({ ok: false, text: err instanceof Error ? err.message : 'failed' });
+    } finally {
+      setAuthBusy(false);
     }
   }
 
@@ -163,6 +212,104 @@ export default function SettingsDialog({ settings, onChange, onOpenBench, onClos
           the on-device checkers whenever the server is unreachable.
         </p>
       </div>
+
+      <div className="settings-block">
+        <strong>Account & cloud backup · 계정과 클라우드 백업</strong>
+        {!cloudConfigured() ? (
+          <p className="settings-hint">
+            Cloud backup isn't configured. Add <code>VITE_SUPABASE_URL</code> and{' '}
+            <code>VITE_SUPABASE_ANON_KEY</code> to <code>.env</code> and rebuild — see{' '}
+            <code>docs/SUPABASE_SETUP.md</code>. Notes always stay usable locally.
+          </p>
+        ) : user ? (
+          <>
+            <p className="settings-hint">
+              Signed in as <strong>{user.email}</strong>
+            </p>
+            <div className="ai-test-row">
+              <button
+                className="btn btn-quiet"
+                disabled={authBusy}
+                onClick={() => {
+                  setAuthBusy(true);
+                  void signOut()
+                    .catch(() => undefined)
+                    .finally(() => setAuthBusy(false));
+                }}
+              >
+                Sign out
+              </button>
+              <button className="btn btn-quiet danger" disabled={authBusy} onClick={() => void doDeleteAccount()}>
+                Delete account & cloud backups
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <label className="field-label" htmlFor="acct-email">
+              Email
+            </label>
+            <input
+              id="acct-email"
+              className="field"
+              type="email"
+              autoComplete="email"
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+            />
+            <label className="field-label" htmlFor="acct-password">
+              Password
+            </label>
+            <input
+              id="acct-password"
+              className="field"
+              type="password"
+              autoComplete="current-password"
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+            />
+            <div className="ai-test-row">
+              <button
+                className="btn btn-primary"
+                disabled={authBusy || !authEmail.trim() || !authPassword}
+                onClick={() => void doAuth('in')}
+              >
+                Sign in
+              </button>
+              <button
+                className="btn btn-quiet"
+                disabled={authBusy || !authEmail.trim() || !authPassword}
+                onClick={() => void doAuth('up')}
+              >
+                Create account
+              </button>
+            </div>
+          </>
+        )}
+        {authNote && (
+          <p className={'ai-status ' + (authNote.ok ? 'ok' : 'fail')}>{authNote.text}</p>
+        )}
+      </div>
+
+      {cloudConfigured() && (
+        <div className="settings-row">
+          <div>
+            <strong>Auto-backup on close</strong>
+            <p className="settings-hint">
+              When you leave a notebook, back it up to the cloud silently (requires sign-in;
+              retries when back online).
+            </p>
+          </div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={settings.autoBackup}
+              onChange={(e) => onChange({ autoBackup: e.target.checked })}
+            />
+            <span className="switch-track" />
+          </label>
+        </div>
+      )}
 
       <div className="settings-block">
         <strong>Handwriting recognition · 손글씨 인식</strong>
