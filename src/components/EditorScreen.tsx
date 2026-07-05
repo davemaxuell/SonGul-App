@@ -13,7 +13,9 @@ import { exportNotebookPdf, exportPagePng } from '../pdf/exportPdf';
 import { saveBlob } from '../saveFile';
 import { exportBundle } from '../bundle';
 import { autoBackupOnClose } from '../cloud/backup';
-import { noteLocalMutation, syncNow } from '../sync/engine';
+import { cloudConfigured } from '../cloud/supabase';
+import { noteLocalMutation, roleFor, syncNow, type NotebookRole } from '../sync/engine';
+import CommentsPanel from './CommentsPanel';
 import { RecognitionScheduler } from '../recognition/scheduler';
 import { mlkitProvider } from '../feedback/recognition';
 import { inkRecognitionAvailable } from '../recognition/songulInk';
@@ -72,6 +74,31 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
   const stacksRef = useRef<Map<string, Stacks>>(new Map());
   const clipboardRef = useRef<Stroke[]>([]);
   const schedulerRef = useRef<RecognitionScheduler | null>(null);
+
+  // shared-notebook role (spec §12.3) — viewers get a read-only editor
+  const [role, setRole] = useState<NotebookRole>('owner');
+  const readOnly = role === 'viewer';
+  const readOnlyRef = useRef(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentCount, setCommentCount] = useState(0);
+
+  useEffect(() => {
+    void roleFor(notebook.id).then(setRole);
+  }, [notebook.id]);
+
+  useEffect(() => {
+    readOnlyRef.current = readOnly;
+    if (readOnly) {
+      setTool('hand');
+      setSelection(null);
+      setPanelOpen(false);
+    }
+  }, [readOnly]);
+
+  useEffect(() => {
+    if (!cloudConfigured() || !currentPageId) return;
+    void db.listCommentsByPage(currentPageId).then((r) => setCommentCount(r.length));
+  }, [currentPageId, commentsOpen]);
 
   useEffect(() => {
     if (!inkRecognitionAvailable()) return;
@@ -180,6 +207,7 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
   }
 
   const undo = useCallback(() => {
+    if (readOnlyRef.current) return;
     const s = stacks();
     const op = s.undo.pop();
     if (!op) return;
@@ -190,6 +218,7 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
   }, [currentPageId]);
 
   const redo = useCallback(() => {
+    if (readOnlyRef.current) return;
     const s = stacks();
     const op = s.redo.pop();
     if (!op) return;
@@ -486,39 +515,45 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
           <h1 className="notebook-title">{notebook.title}</h1>
         </div>
 
-        <Toolbar
-          tool={tool}
-          penColor={penColor}
-          penWidth={penWidth}
-          hlColor={hlColor}
-          hlWidth={hlWidth}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          canPaste={clipboardRef.current.length > 0}
-          onTool={(t) => {
-            setTool(t);
-            if (t !== 'lasso') setSelection(null);
-          }}
-          onColor={(t: InkTool, c) => (t === 'pen' ? setPenColor(c) : setHlColor(c))}
-          onWidth={(t: InkTool, w) => (t === 'pen' ? setPenWidth(w) : setHlWidth(w))}
-          onUndo={undo}
-          onRedo={redo}
-          onPaste={() => pasteStrokes(clipboardRef.current, 28)}
-        />
+        {readOnly ? (
+          <span className="view-only-badge">읽기 전용 · View only</span>
+        ) : (
+          <Toolbar
+            tool={tool}
+            penColor={penColor}
+            penWidth={penWidth}
+            hlColor={hlColor}
+            hlWidth={hlWidth}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            canPaste={clipboardRef.current.length > 0}
+            onTool={(t) => {
+              setTool(t);
+              if (t !== 'lasso') setSelection(null);
+            }}
+            onColor={(t: InkTool, c) => (t === 'pen' ? setPenColor(c) : setHlColor(c))}
+            onWidth={(t: InkTool, w) => (t === 'pen' ? setPenWidth(w) : setHlWidth(w))}
+            onUndo={undo}
+            onRedo={redo}
+            onPaste={() => pasteStrokes(clipboardRef.current, 28)}
+          />
+        )}
 
         <div className="topbar-right">
-          <label className="btn btn-quiet file-btn">
-            + PDF
-            <input
-              type="file"
-              accept="application/pdf"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void handlePdfImport(f);
-                e.target.value = '';
-              }}
-            />
-          </label>
+          {!readOnly && (
+            <label className="btn btn-quiet file-btn">
+              + PDF
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handlePdfImport(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
           <div className="export-wrap">
             <button className="btn btn-quiet" onClick={() => setExportOpen((o) => !o)}>
               Export ▾
@@ -531,13 +566,30 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
               </div>
             )}
           </div>
-          <button
-            className={'btn redpen-btn' + (panelOpen ? ' active' : '')}
-            onClick={() => setPanelOpen((o) => !o)}
-            aria-pressed={panelOpen}
-          >
-            교정
-          </button>
+          {cloudConfigured() && (
+            <button
+              className={'btn btn-quiet comments-btn' + (commentsOpen ? ' active' : '')}
+              onClick={() => {
+                setCommentsOpen((o) => !o);
+                setPanelOpen(false);
+              }}
+              aria-pressed={commentsOpen}
+            >
+              💬{commentCount > 0 ? ` ${commentCount}` : ''}
+            </button>
+          )}
+          {!readOnly && (
+            <button
+              className={'btn redpen-btn' + (panelOpen ? ' active' : '')}
+              onClick={() => {
+                setPanelOpen((o) => !o);
+                setCommentsOpen(false);
+              }}
+              aria-pressed={panelOpen}
+            >
+              교정
+            </button>
+          )}
         </div>
       </header>
 
@@ -551,11 +603,11 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
             setCurrentPageId(id);
             setHighlights([]);
           }}
-          onAddPage={() => void addPage(settings.defaultTemplate)}
-          onAddPageWithTemplate={() => setTemplatePickerOpen(true)}
-          onDuplicate={(id) => void duplicatePage(id)}
-          onDelete={(id) => void deletePage(id)}
-          onMove={(id, dir) => void movePage(id, dir)}
+          onAddPage={readOnly ? () => {} : () => void addPage(settings.defaultTemplate)}
+          onAddPageWithTemplate={readOnly ? () => {} : () => setTemplatePickerOpen(true)}
+          onDuplicate={readOnly ? () => {} : (id) => void duplicatePage(id)}
+          onDelete={readOnly ? () => {} : (id) => void deletePage(id)}
+          onMove={readOnly ? () => {} : (id, dir) => void movePage(id, dir)}
         />
 
         {currentPage ? (
@@ -579,6 +631,20 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
           />
         ) : (
           <div className="canvas-container" />
+        )}
+
+        {commentsOpen && currentPage && (
+          <CommentsPanel
+            notebook={notebook}
+            page={currentPage}
+            anchor={selection?.bbox ?? null}
+            onFlash={(bbox) => {
+              setHighlights([bbox]);
+              setTimeout(() => setHighlights([]), 2500);
+            }}
+            onClose={() => setCommentsOpen(false)}
+            onCountChange={setCommentCount}
+          />
         )}
 
         {panelOpen && currentPage && (
