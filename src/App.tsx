@@ -6,8 +6,10 @@ import LibraryScreen from './components/LibraryScreen';
 import EditorScreen from './components/EditorScreen';
 import SettingsDialog from './components/SettingsDialog';
 import BenchScreen from './components/BenchScreen';
-import { setBlobHooks, startSyncTriggers } from './sync/engine';
+import { setBlobHooks, startSyncTriggers, syncNow } from './sync/engine';
 import { makeBlobHooks } from './sync/blobs';
+import { cloudConfigured, currentUser } from './cloud/supabase';
+import { redeemShareToken } from './cloud/share';
 
 type Screen =
   | { name: 'library' }
@@ -30,6 +32,29 @@ export default function App() {
     setBlobHooks(makeBlobHooks());
     void db.compactTombstones(30 * 24 * 3600 * 1000);
     return startSyncTriggers();
+  }, []);
+
+  // share-link redemption: https://…/#share=<token> (spec §12.1)
+  useEffect(() => {
+    const m = window.location.hash.match(/^#share=([0-9a-f-]{36})/i);
+    if (!m || !cloudConfigured()) return;
+    void (async () => {
+      const user = await currentUser();
+      if (!user) {
+        alert(
+          '공유 링크를 받으려면 설정에서 로그인한 뒤 링크를 다시 열어주세요.\nShare link: sign in (Settings → Account), then open the link again.'
+        );
+        return;
+      }
+      try {
+        await redeemShareToken(m[1]);
+        window.location.hash = '';
+        await syncNow();
+        alert('공유 노트를 받았어요! 서재에서 확인하세요.\nShared notebook added — check your library.');
+      } catch (err) {
+        alert('Share link failed: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    })();
   }, []);
 
   if (!settings)

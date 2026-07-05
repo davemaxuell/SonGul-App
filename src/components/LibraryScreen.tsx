@@ -7,7 +7,9 @@ import { jamoIncludes } from '../recognition/jamo';
 import { inkRecognitionAvailable } from '../recognition/songulInk';
 import { cloudConfigured } from '../cloud/supabase';
 import { useCloudUser } from '../cloud/useCloudUser';
-import { getSyncStatus, onSyncStatus, syncNow } from '../sync/engine';
+import { getSyncStatus, onSyncStatus, syncNow, type NotebookRole } from '../sync/engine';
+import { removeMember } from '../cloud/share';
+import ShareDialog from './ShareDialog';
 import {
   backupNotebook,
   deleteBackup,
@@ -90,6 +92,41 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
   useEffect(() => {
     void syncNow();
   }, []);
+
+  const [roles, setRoles] = useState<Record<string, NotebookRole>>({});
+  const [sharing, setSharing] = useState<Notebook | null>(null);
+  useEffect(() => {
+    void db.getSetting<Record<string, NotebookRole>>('notebookRoles').then((r) => setRoles(r ?? {}));
+  }, [sync.lastSyncAt]);
+
+  function roleOf(nb: Notebook): NotebookRole {
+    return roles[nb.id] ?? 'owner';
+  }
+
+  async function removeFromLibrary(nb: Notebook) {
+    if (!cloudUser) return;
+    if (
+      !window.confirm(
+        `"${nb.title}"을(를) 내 서재에서 제거할까요? 소유자의 원본은 그대로 남습니다.\nRemove from my library? The owner's copy is not affected.`
+      )
+    )
+      return;
+    try {
+      await removeMember(nb.id, cloudUser.id);
+    } catch (err) {
+      alert('Could not leave the notebook: ' + (err instanceof Error ? err.message : String(err)));
+      return;
+    }
+    await db.purgeNotebookLocal(nb.id);
+    const cursors = (await db.getSetting<Record<string, number>>('syncCursors')) ?? {};
+    delete cursors[nb.id];
+    await db.setSetting('syncCursors', cursors);
+    const roleMap = (await db.getSetting<Record<string, NotebookRole>>('notebookRoles')) ?? {};
+    delete roleMap[nb.id];
+    await db.setSetting('notebookRoles', roleMap);
+    setRoles(roleMap);
+    await refresh();
+  }
 
   async function refreshCloud() {
     try {
@@ -223,7 +260,11 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
   }
 
   async function remove(nb: Notebook) {
-    if (!window.confirm(`Delete "${nb.title}" and all of its pages?`)) return;
+    const sharedWarning =
+      cloudConfigured() && cloudUser
+        ? '\n공유 중이라면 모든 멤버에게서 삭제됩니다. If shared, this deletes it for every member.'
+        : '';
+    if (!window.confirm(`Delete "${nb.title}" and all of its pages?${sharedWarning}`)) return;
     await db.deleteNotebookCascade(nb.id);
     await refresh();
   }
@@ -374,7 +415,12 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
               </button>
               <div className="notebook-meta">
                 <div className="notebook-meta-text">
-                  <span className="notebook-name">{nb.title}</span>
+                  <span className="notebook-name">
+                    {nb.title}
+                    {roleOf(nb) !== 'owner' && (
+                      <span className="shared-chip">공유 · {roleOf(nb)}</span>
+                    )}
+                  </span>
                   <span className="notebook-sub">
                     {pageCounts[nb.id] ?? '…'} page{(pageCounts[nb.id] ?? 0) === 1 ? '' : 's'} ·{' '}
                     {templateName(nb.template)} · {new Date(nb.updatedAt).toLocaleDateString()}
@@ -416,15 +462,37 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
                         Back up to cloud
                       </button>
                     )}
-                    <button
-                      className="danger"
-                      onClick={() => {
-                        void remove(nb);
-                        setMenuFor(null);
-                      }}
-                    >
-                      Delete
-                    </button>
+                    {cloudConfigured() && cloudUser && roleOf(nb) === 'owner' && (
+                      <button
+                        onClick={() => {
+                          setSharing(nb);
+                          setMenuFor(null);
+                        }}
+                      >
+                        공유 · Share…
+                      </button>
+                    )}
+                    {roleOf(nb) === 'owner' ? (
+                      <button
+                        className="danger"
+                        onClick={() => {
+                          void remove(nb);
+                          setMenuFor(null);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    ) : (
+                      <button
+                        className="danger"
+                        onClick={() => {
+                          void removeFromLibrary(nb);
+                          setMenuFor(null);
+                        }}
+                      >
+                        내 서재에서 제거 · Remove from my library
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -528,6 +596,8 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
           )}
         </Modal>
       )}
+
+      {sharing && <ShareDialog notebook={sharing} onClose={() => setSharing(null)} />}
 
       {busy && (
         <div className="busy-overlay">
