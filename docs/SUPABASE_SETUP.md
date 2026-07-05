@@ -214,3 +214,99 @@ Blobs (PDF attachments, page backgrounds, snapshots) reuse the private
 already cover those paths. Sync is fully client-driven: the app pushes local
 ops, pulls newer ones by `server_seq`, and applies them with LWW rules; a
 device only ever sees notebooks it is a member of.
+
+## v0.5 — Sharing & comments (run once, after the v0.4 block)
+
+```sql
+-- Share links: anyone signed-in who opens the link becomes a member.
+create table public.share_tokens (
+  token uuid primary key default gen_random_uuid(),
+  notebook_id text not null references public.notebook_sync (notebook_id) on delete cascade,
+  role text not null check (role in ('editor', 'viewer')),
+  created_by uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+alter table public.share_tokens enable row level security;
+grant select, insert, delete on public.share_tokens to authenticated;
+create policy "tokens owner all" on public.share_tokens
+  for all to authenticated
+  using (exists (select 1 from public.notebook_sync s
+                 where s.notebook_id = share_tokens.notebook_id
+                   and s.owner_id = (select auth.uid())))
+  with check (created_by = (select auth.uid()));
+
+-- Invite an existing account by email (owner only).
+create or replace function public.add_member_by_email(nb text, member_email text, member_role text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare target uuid;
+begin
+  if not exists (select 1 from public.notebook_sync s where s.notebook_id = nb and s.owner_id = auth.uid()) then
+    raise exception 'only the owner can invite';
+  end if;
+  if member_role not in ('editor', 'viewer') then raise exception 'bad role'; end if;
+  select id into target from auth.users where lower(email) = lower(member_email) limit 1;
+  if target is null then raise exception 'no account with that email'; end if;
+  insert into public.notebook_members (notebook_id, user_id, role)
+    values (nb, target, member_role)
+    on conflict (notebook_id, user_id) do update set role = excluded.role;
+end; $$;
+revoke execute on function public.add_member_by_email from public, anon;
+grant execute on function public.add_member_by_email to authenticated;
+
+-- Redeem a share link (returns the notebook id so the client can pull it).
+create or replace function public.redeem_share_token(t uuid)
+returns text language plpgsql security definer set search_path = '' as $$
+declare tok record;
+begin
+  if auth.uid() is null then raise exception 'sign in first'; end if;
+  select * into tok from public.share_tokens where token = t;
+  if tok is null then raise exception 'invalid or revoked link'; end if;
+  insert into public.notebook_members (notebook_id, user_id, role)
+    values (tok.notebook_id, auth.uid(), tok.role)
+    on conflict (notebook_id, user_id) do nothing;
+  return tok.notebook_id;
+end; $$;
+revoke execute on function public.redeem_share_token from public, anon;
+grant execute on function public.redeem_share_token to authenticated;
+
+-- Member list with emails for the share dialog (members only).
+create or replace function public.list_members(nb text)
+returns table (user_id uuid, email text, role text)
+language sql stable security definer set search_path = '' as $$
+  select m.user_id, u.email::text, m.role
+  from public.notebook_members m join auth.users u on u.id = m.user_id
+  where m.notebook_id = nb and public.is_member(nb);
+$$;
+revoke execute on function public.list_members from public, anon;
+grant execute on function public.list_members to authenticated;
+
+-- Owner removes anyone (except the owner row); members may remove themselves.
+create or replace function public.remove_member(nb text, member uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not exists (select 1 from public.notebook_sync s where s.notebook_id = nb and s.owner_id = auth.uid())
+     and member <> auth.uid() then
+    raise exception 'not allowed';
+  end if;
+  delete from public.notebook_members where notebook_id = nb and user_id = member and role <> 'owner';
+end; $$;
+revoke execute on function public.remove_member from public, anon;
+grant execute on function public.remove_member to authenticated;
+
+-- Viewers may write comments only (replaces the v0.4 insert policy).
+drop policy "ops insert writer" on public.sync_ops;
+create policy "ops insert writer" on public.sync_ops
+  for insert to authenticated
+  with check (
+    author_id = (select auth.uid())
+    and exists (select 1 from public.notebook_members m
+                where m.notebook_id = sync_ops.notebook_id
+                  and m.user_id = (select auth.uid())
+                  and (m.role in ('owner', 'editor')
+                       or (m.role = 'viewer' and sync_ops.op_type = 'ADD_COMMENT')))
+  );
+```
+
+Share links look like `https://son-gul-web-ui.vercel.app/#share=<token>` — the
+recipient signs in (or creates an account) and opens the link; the notebook
+appears in their library on the next sync with the role the link grants.
