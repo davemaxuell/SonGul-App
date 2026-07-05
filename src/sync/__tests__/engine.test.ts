@@ -90,6 +90,14 @@ describe('sync engine', () => {
     expect(fake.server._state.ops.length).toBe(opsOnServer);
   });
 
+  it('records membership roles in the notebookRoles setting', async () => {
+    fake.server._state.registry.set('shared-nb', { owner_id: 'user-9', title: 't' });
+    fake.server._state.members.push({ notebook_id: 'shared-nb', user_id: 'user-1', role: 'viewer' });
+    await syncNow();
+    const roles = await db.getSetting<Record<string, string>>('notebookRoles');
+    expect(roles?.['shared-nb']).toBe('viewer');
+  });
+
   it('echo suppression: own pushed ops never re-apply', async () => {
     const nb = await db.createNotebook('echo ' + uid(), 'blank');
     await db.putNotebook({ ...nb, title: 'local title', updatedAt: Date.now() + 1 });

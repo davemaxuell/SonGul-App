@@ -141,13 +141,24 @@ async function pushOnce(userId: string): Promise<string[]> {
   return [...touched];
 }
 
-async function memberNotebookIds(userId: string): Promise<string[]> {
+export type NotebookRole = 'owner' | 'editor' | 'viewer';
+
+async function memberships(userId: string): Promise<{ id: string; role: NotebookRole }[]> {
   const { data, error } = await supabase()
     .from('notebook_members')
     .select('notebook_id, role')
     .eq('user_id', userId);
   if (error) throw error;
-  return (data ?? []).map((r: { notebook_id: string }) => r.notebook_id);
+  return (data ?? []).map((r: { notebook_id: string; role: string }) => ({
+    id: r.notebook_id,
+    role: r.role as NotebookRole,
+  }));
+}
+
+/** Role this account holds on a notebook; local-only notebooks are 'owner'. */
+export async function roleFor(notebookId: string): Promise<NotebookRole> {
+  const roles = (await db.getSetting<Record<string, NotebookRole>>('notebookRoles')) ?? {};
+  return roles[notebookId] ?? 'owner';
 }
 
 async function pullNotebook(notebookId: string): Promise<SyncOp[]> {
@@ -220,7 +231,9 @@ async function doSync(): Promise<SyncStatus> {
     await backfillIfNeeded();
     const pushedNbs = await pushOnce(user.id);
     await hooks.afterPush(pushedNbs);
-    const nbIds = await memberNotebookIds(user.id);
+    const members = await memberships(user.id);
+    await db.setSetting('notebookRoles', Object.fromEntries(members.map((m) => [m.id, m.role])));
+    const nbIds = members.map((m) => m.id);
     const applied: SyncOp[] = [];
     for (const id of nbIds) applied.push(...(await pullNotebook(id)));
     await hooks.afterApply(applied);
