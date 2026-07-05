@@ -7,6 +7,7 @@ import { jamoIncludes } from '../recognition/jamo';
 import { inkRecognitionAvailable } from '../recognition/songulInk';
 import { cloudConfigured } from '../cloud/supabase';
 import { useCloudUser } from '../cloud/useCloudUser';
+import { getSyncStatus, onSyncStatus, syncNow } from '../sync/engine';
 import {
   backupNotebook,
   deleteBackup,
@@ -84,6 +85,11 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
   const cloudUser = useCloudUser();
   const [cloudOpen, setCloudOpen] = useState(false);
   const [cloudRows, setCloudRows] = useState<CloudBackupRow[] | null>(null);
+  const [sync, setSync] = useState(getSyncStatus());
+  useEffect(() => onSyncStatus(setSync), []);
+  useEffect(() => {
+    void syncNow();
+  }, []);
 
   async function refreshCloud() {
     try {
@@ -282,6 +288,21 @@ export default function LibraryScreen({ settings, onOpen, onOpenAt, onOpenSettin
               }}
             />
           </label>
+          {sync.state !== 'disabled' && (
+            <button
+              className={`btn btn-quiet sync-chip sync-${sync.state}`}
+              onClick={() => void syncNow()}
+              title="Sync now · 지금 동기화"
+            >
+              {sync.state === 'syncing'
+                ? '☁ syncing…'
+                : sync.state === 'error'
+                  ? '☁ sync error'
+                  : sync.lastSyncAt
+                    ? `☁ ${new Date(sync.lastSyncAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                    : '☁ sync'}
+            </button>
+          )}
           {cloudConfigured() && (
             <button className="btn btn-quiet" onClick={() => setCloudOpen(true)}>
               Cloud

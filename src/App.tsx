@@ -6,6 +6,8 @@ import LibraryScreen from './components/LibraryScreen';
 import EditorScreen from './components/EditorScreen';
 import SettingsDialog from './components/SettingsDialog';
 import BenchScreen from './components/BenchScreen';
+import { setBlobHooks, startSyncTriggers } from './sync/engine';
+import { makeBlobHooks } from './sync/blobs';
 
 type Screen =
   | { name: 'library' }
@@ -22,6 +24,12 @@ export default function App() {
       const saved = await db.getSetting<Partial<Settings>>('settings');
       setSettings({ ...DEFAULT_SETTINGS, ...saved });
     })();
+  }, []);
+
+  useEffect(() => {
+    setBlobHooks(makeBlobHooks());
+    void db.compactTombstones(30 * 24 * 3600 * 1000);
+    return startSyncTriggers();
   }, []);
 
   if (!settings)

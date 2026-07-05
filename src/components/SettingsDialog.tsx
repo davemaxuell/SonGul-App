@@ -311,6 +311,26 @@ export default function SettingsDialog({ settings, onChange, onOpenBench, onClos
         </div>
       )}
 
+      {cloudConfigured() && (
+        <div className="settings-row">
+          <div>
+            <strong>Cloud sync · 기기 간 동기화</strong>
+            <p className="settings-hint">
+              Syncs every change across your signed-in devices (edits, pages, ink).
+              Off = backups only.
+            </p>
+          </div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={settings.cloudSync}
+              onChange={(e) => onChange({ cloudSync: e.target.checked })}
+            />
+            <span className="switch-track" />
+          </label>
+        </div>
+      )}
+
       <div className="settings-block">
         <strong>Handwriting recognition · 손글씨 인식</strong>
         {inkRecognitionAvailable() ? (

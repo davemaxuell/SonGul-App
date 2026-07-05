@@ -13,6 +13,7 @@ import { exportNotebookPdf, exportPagePng } from '../pdf/exportPdf';
 import { saveBlob } from '../saveFile';
 import { exportBundle } from '../bundle';
 import { autoBackupOnClose } from '../cloud/backup';
+import { noteLocalMutation, syncNow } from '../sync/engine';
 import { RecognitionScheduler } from '../recognition/scheduler';
 import { mlkitProvider } from '../feedback/recognition';
 import { inkRecognitionAvailable } from '../recognition/songulInk';
@@ -204,6 +205,7 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
     (stroke: Stroke) => {
       strokesRef.current.push(stroke);
       void db.putStroke(stroke);
+      noteLocalMutation();
       pushOp({ kind: 'add', ids: [stroke.id] });
       schedulerRef.current?.noteStroke(stroke.pageId, stroke);
       bump();
@@ -474,6 +476,7 @@ export default function EditorScreen({ notebook, settings, initialJump, onBack }
             className="icon-btn back-btn"
             onClick={() => {
               void autoBackupOnClose(notebook, settings.autoBackup);
+              void syncNow();
               onBack();
             }}
             aria-label="Back to library"

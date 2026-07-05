@@ -1533,3 +1533,7 @@ textarea:focus-visible {
   gap: 8px;
   flex-shrink: 0;
 }
+
+.sync-chip { font-variant-numeric: tabular-nums; }
+.sync-chip.sync-error { color: #c4472b; }
+.sync-chip.sync-syncing { opacity: 0.7; }
