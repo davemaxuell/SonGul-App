@@ -39,6 +39,9 @@ export interface Stroke {
   createdAt: number;
   /** tombstone — erased strokes are kept for undo/sync */
   deleted: boolean;
+  /** LWW stamp of the last applied remote op (sync) */
+  syncTs?: number;
+  syncDev?: string;
 }
 
 export interface PdfBackground {
@@ -57,6 +60,10 @@ export interface Page {
   practice?: { sentences: string[] };
   createdAt: number;
   updatedAt: number;
+  /** tombstone — kept for sync recoverability, hidden from listings */
+  deleted?: boolean;
+  syncTs?: number;
+  syncDev?: string;
 }
 
 export interface Notebook {
@@ -65,6 +72,10 @@ export interface Notebook {
   template: TemplateId;
   createdAt: number;
   updatedAt: number;
+  /** tombstone — kept for sync recoverability, hidden from listings */
+  deleted?: boolean;
+  syncTs?: number;
+  syncDev?: string;
 }
 
 export interface Attachment {
@@ -117,6 +128,8 @@ export interface RecognitionRecord {
   provider: string;
   timestamp: number;
   status: 'ok' | 'failed';
+  syncTs?: number;
+  syncDev?: string;
 }
 
 export type AiMode = 'auto' | 'local' | 'remote';
@@ -135,6 +148,8 @@ export interface Settings {
   serverUrl: string;
   /** auto-backup notebooks to the cloud on close (needs sign-in) */
   autoBackup: boolean;
+  /** cross-device sync when signed in (needs cloud config) */
+  cloudSync: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -145,4 +160,5 @@ export const DEFAULT_SETTINGS: Settings = {
   aiMode: 'auto',
   serverUrl: '',
   autoBackup: false,
+  cloudSync: true,
 };
