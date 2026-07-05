@@ -1,7 +1,7 @@
 // Sync op model + deterministic LWW apply (spec §11.2/§11.3). One op = one row
 // change; ops are the ONLY thing devices exchange.
 import * as db from '../db';
-import type { FeedbackResult, Notebook, Page, RecognitionRecord, Stroke } from '../types';
+import type { Comment, FeedbackResult, Notebook, Page, RecognitionRecord, Stroke } from '../types';
 
 export type SyncOpType =
   | 'UPSERT_NOTEBOOK'
@@ -35,7 +35,7 @@ export type OpPayloads = {
   PUT_STROKE: { stroke: Stroke };
   ADD_FEEDBACK: { feedback: FeedbackResult };
   PUT_RECOGNITION: { record: RecognitionRecord };
-  ADD_COMMENT: { comment: unknown };
+  ADD_COMMENT: { comment: Comment };
 };
 
 /** Deterministic LWW: incoming wins on strictly greater (ts, deviceId). */
@@ -116,9 +116,13 @@ export async function applyOp(op: SyncOp): Promise<void> {
         }
         break;
       }
-      case 'ADD_COMMENT':
-        // arrives in Phase 5; ignore quietly so mixed-version devices don't crash
+      case 'ADD_COMMENT': {
+        const { comment } = op.payload as OpPayloads['ADD_COMMENT'];
+        if (!(await db.getComment(comment.id))) {
+          await db.addComment(comment);
+        }
         break;
+      }
     }
   });
 }

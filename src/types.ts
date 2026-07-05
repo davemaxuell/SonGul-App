@@ -132,6 +132,17 @@ export interface RecognitionRecord {
   syncDev?: string;
 }
 
+/** Teacher/collaborator note anchored to a page (append-only, synced) */
+export interface Comment {
+  id: string;
+  notebookId: string;
+  pageId: string;
+  bbox: BBox | null;
+  text: string;
+  authorEmail: string;
+  createdAt: number;
+}
+
 export type AiMode = 'auto' | 'local' | 'remote';
 
 export interface Settings {

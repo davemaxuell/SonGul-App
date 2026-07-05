@@ -4,6 +4,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type {
   Attachment,
+  Comment,
   FeedbackResult,
   Notebook,
   Page,
@@ -34,13 +35,18 @@ interface SongulDB extends DBSchema {
     value: SyncOp;
     indexes: { 'by-synced': number; 'by-opid': string };
   };
+  comments: {
+    key: string;
+    value: Comment;
+    indexes: { 'by-page': string; 'by-notebook': string };
+  };
 }
 
 let dbPromise: Promise<IDBPDatabase<SongulDB>> | null = null;
 
 function db(): Promise<IDBPDatabase<SongulDB>> {
   if (!dbPromise) {
-    dbPromise = openDB<SongulDB>('songul-note', 3, {
+    dbPromise = openDB<SongulDB>('songul-note', 4, {
       upgrade(d, oldVersion) {
         if (oldVersion < 1) {
           d.createObjectStore('notebooks', { keyPath: 'id' });
@@ -62,6 +68,11 @@ function db(): Promise<IDBPDatabase<SongulDB>> {
           const ops = d.createObjectStore('oplog', { autoIncrement: true });
           ops.createIndex('by-synced', 'synced');
           ops.createIndex('by-opid', 'opId', { unique: true });
+        }
+        if (oldVersion < 4) {
+          const cm = d.createObjectStore('comments', { keyPath: 'id' });
+          cm.createIndex('by-page', 'pageId');
+          cm.createIndex('by-notebook', 'notebookId');
         }
       },
     });
@@ -319,6 +330,61 @@ export async function getSetting<T>(key: string): Promise<T | undefined> {
 
 export async function setSetting(key: string, value: unknown): Promise<void> {
   await (await db()).put('settings', { key, value });
+}
+
+// ---- comments (append-only, synced as ADD_COMMENT ops) ----
+
+export async function addComment(c: Comment): Promise<void> {
+  await (await db()).put('comments', c);
+  await appendOp(c.notebookId, 'ADD_COMMENT', { comment: c }, c.createdAt);
+}
+
+export async function listCommentsByPage(pageId: string): Promise<Comment[]> {
+  const rows = await (await db()).getAllFromIndex('comments', 'by-page', pageId);
+  return rows.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function listCommentsByNotebook(notebookId: string): Promise<Comment[]> {
+  return (await db()).getAllFromIndex('comments', 'by-notebook', notebookId);
+}
+
+export async function getComment(id: string): Promise<Comment | undefined> {
+  return (await db()).get('comments', id);
+}
+
+/** Physically remove a notebook and everything under it, silently (no ops).
+ *  For leaving a SHARED notebook — the owner's copy is untouched. */
+export async function purgeNotebookLocal(id: string): Promise<void> {
+  const d = await db();
+  for (const p of await d.getAllFromIndex('pages', 'by-notebook', id)) {
+    for (const s of await d.getAllFromIndex('strokes', 'by-page', p.id)) {
+      await d.delete('strokes', s.id);
+    }
+    await deleteRecognitionForPage(p.id);
+    await d.delete('pageImages', p.id);
+    await d.delete('pages', p.id);
+  }
+  for (const f of await d.getAllFromIndex('feedback', 'by-notebook', id)) {
+    await d.delete('feedback', f.id);
+  }
+  for (const c of await d.getAllFromIndex('comments', 'by-notebook', id)) {
+    await d.delete('comments', c.id);
+  }
+  await d.delete('notebooks', id);
+  await deleteOpsForNotebook(id);
+}
+
+/** Drop all oplog rows for a notebook (used when leaving a shared notebook —
+ *  a stray op we may not push would poison every future push batch). */
+export async function deleteOpsForNotebook(notebookId: string): Promise<void> {
+  const d = await db();
+  const tx = d.transaction('oplog', 'readwrite');
+  let cur = await tx.store.openCursor();
+  while (cur) {
+    if (cur.value.notebookId === notebookId) await cur.delete();
+    cur = await cur.continue();
+  }
+  await tx.done;
 }
 
 // ---- oplog & compaction ----
