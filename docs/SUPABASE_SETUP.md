@@ -125,4 +125,92 @@ Notes:
 Backups are **whole-notebook snapshots, newest wins** — there is no merge.
 Restoring always imports a **copy** with fresh internal ids (the app offers to
 replace the local original when it's still present). Cross-device delta sync
-is a future milestone (plan.md M9) and will build on this same manifest.
+(v0.4, below) is separate and operation-based.
+
+## v0.4 — Cross-device sync schema (run once, after the v0.3 block)
+
+```sql
+-- Registry of synced notebooks (created automatically on first push)
+create table public.notebook_sync (
+  notebook_id text primary key,
+  owner_id uuid not null references auth.users (id) on delete cascade,
+  title text not null default '',
+  created_at timestamptz not null default now()
+);
+
+-- Membership (v0.4 writes only the owner row; sharing arrives in v0.5)
+create table public.notebook_members (
+  notebook_id text not null references public.notebook_sync (notebook_id) on delete cascade,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  role text not null check (role in ('owner', 'editor', 'viewer')),
+  created_at timestamptz not null default now(),
+  primary key (notebook_id, user_id)
+);
+
+-- The op stream. server_seq gives one total order all devices replay.
+create table public.sync_ops (
+  notebook_id text not null references public.notebook_sync (notebook_id) on delete cascade,
+  server_seq bigint generated always as identity,
+  op_id text not null unique,
+  author_id uuid not null references auth.users (id) on delete cascade,
+  device_id text not null,
+  op_type text not null,
+  payload jsonb not null,
+  client_ts bigint not null,
+  created_at timestamptz not null default now(),
+  primary key (notebook_id, server_seq)
+);
+create index sync_ops_pull on public.sync_ops (notebook_id, server_seq);
+
+alter table public.notebook_sync enable row level security;
+alter table public.notebook_members enable row level security;
+alter table public.sync_ops enable row level security;
+grant select, insert, update, delete on public.notebook_sync to authenticated;
+grant select, insert, update, delete on public.notebook_members to authenticated;
+grant select, insert on public.sync_ops to authenticated;
+
+create or replace function public.is_member(nb text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1 from public.notebook_members m
+    where m.notebook_id = nb and m.user_id = auth.uid()
+  );
+$$;
+
+create policy "sync registry select member" on public.notebook_sync
+  for select to authenticated using (public.is_member(notebook_id));
+create policy "sync registry insert own" on public.notebook_sync
+  for insert to authenticated with check (owner_id = (select auth.uid()));
+
+create policy "members select own notebooks" on public.notebook_members
+  for select to authenticated
+  using (user_id = (select auth.uid()) or public.is_member(notebook_id));
+create policy "members owner self-insert" on public.notebook_members
+  for insert to authenticated
+  with check (
+    user_id = (select auth.uid())
+    and exists (select 1 from public.notebook_sync s
+                where s.notebook_id = notebook_members.notebook_id
+                  and s.owner_id = (select auth.uid()))
+  );
+create policy "members delete self" on public.notebook_members
+  for delete to authenticated using (user_id = (select auth.uid()));
+
+create policy "ops select member" on public.sync_ops
+  for select to authenticated using (public.is_member(notebook_id));
+create policy "ops insert writer" on public.sync_ops
+  for insert to authenticated
+  with check (
+    author_id = (select auth.uid())
+    and exists (select 1 from public.notebook_members m
+                where m.notebook_id = sync_ops.notebook_id
+                  and m.user_id = (select auth.uid())
+                  and m.role in ('owner', 'editor'))
+  );
+```
+
+Blobs (PDF attachments, page backgrounds, snapshots) reuse the private
+`backups` bucket under `{userId}/sync/...` — the v0.3 folder-scoped policies
+already cover those paths. Sync is fully client-driven: the app pushes local
+ops, pulls newer ones by `server_seq`, and applies them with LWW rules; a
+device only ever sees notebooks it is a member of.
